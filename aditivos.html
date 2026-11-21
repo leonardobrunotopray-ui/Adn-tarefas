@@ -1,0 +1,511 @@
+<title>Aditivos de Contrato</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: painel operacional — régua do fluxo (12 etapas) no topo, fila de aditivos em cartões abaixo, detalhe em diálogo. */
+:root{
+  --bg:#eef1f4; --surface:#ffffff; --surface-2:#f6f8fa; --ink:#16202a; --muted:#5a6774; --line:#d6dce3;
+  --accent:#1c5d8f; --accent-soft:#e3eef7; --accent-ink:#ffffff;
+  --ok:#2c7a4b; --ok-soft:#e2f2e8; --warn:#a86c12; --warn-soft:#fbf0dc; --bad:#b83227; --bad-soft:#fae4e1;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-head:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --r:8px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1318; --surface:#161e26; --surface-2:#1c252e; --ink:#e4eaf0; --muted:#93a0ad; --line:#2a3541;
+  --accent:#62a6da; --accent-soft:#1b3347; --accent-ink:#0b1620;
+  --ok:#5cc08a; --ok-soft:#173326; --warn:#e3aa4c; --warn-soft:#3a2c13; --bad:#f0776a; --bad-soft:#3d1c19; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1318; --surface:#161e26; --surface-2:#1c252e; --ink:#e4eaf0; --muted:#93a0ad; --line:#2a3541;
+  --accent:#62a6da; --accent-soft:#1b3347; --accent-ink:#0b1620;
+  --ok:#5cc08a; --ok-soft:#173326; --warn:#e3aa4c; --warn-soft:#3a2c13; --bad:#f0776a; --bad-soft:#3d1c19; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45}
+.wrap{max-width:1180px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+h1,h2,h3{font-family:var(--f-head);font-weight:600;text-wrap:balance;margin:0}
+h1{font-size:1.65rem;letter-spacing:-.01em}
+h2{font-size:1.1rem}
+h3{font-size:1.05rem}
+.mono,.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.label{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:500}
+
+button,.btn{font:inherit;font-weight:500;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:7px 12px;cursor:pointer;line-height:1.2}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.primary:hover{filter:brightness(1.08)}
+button.ghost{background:transparent;border-color:transparent;color:var(--accent);padding-inline:8px}
+button.ghost:hover{background:var(--accent-soft)}
+button.danger{color:var(--bad);border-color:var(--bad)}
+button:disabled{opacity:.55;cursor:wait}
+
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+header.top p{margin:4px 0 0;color:var(--muted);max-width:62ch}
+.top-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* Resumo */
+.summary{display:flex;flex-wrap:wrap;gap:8px 28px;align-items:baseline}
+.summary div{display:flex;gap:8px;align-items:baseline}
+.summary b{font-family:var(--f-mono);font-size:1.25rem;font-weight:500}
+.summary .bad b{color:var(--bad)}
+
+/* Régua do fluxo */
+.flow{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.flow ol{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(12,minmax(92px,1fr));min-width:1100px}
+.flow li{border-right:1px solid var(--line)}
+.flow li:last-child{border-right:0}
+.flow button{width:100%;height:100%;border:0;border-radius:0;background:transparent;text-align:left;padding:10px 10px 12px;display:grid;gap:4px;align-content:start;position:relative}
+.flow button:hover{background:var(--surface-2)}
+.flow button[aria-pressed="true"]{background:var(--accent-soft);box-shadow:inset 0 -3px 0 var(--accent)}
+.flow .n{font-family:var(--f-mono);font-size:.7rem;color:var(--muted)}
+.flow .nm{font-size:.8rem;font-weight:500;line-height:1.2}
+.flow .ct{font-family:var(--f-mono);font-size:1.3rem}
+.flow .ct.zero{color:var(--line)}
+.flow .who{font-size:.68rem;color:var(--muted)}
+.flow .lt{position:absolute;top:10px;right:10px;font-family:var(--f-mono);font-size:.68rem;color:var(--bad);font-weight:500}
+
+/* Filtros */
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.filters input[type=search]{flex:1 1 220px;min-width:0}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}
+textarea{resize:vertical;min-height:70px}
+.filters select{width:auto}
+.check{display:flex;gap:6px;align-items:center;color:var(--muted);white-space:nowrap}
+.check input{width:auto}
+.activefilter{display:inline-flex;gap:6px;align-items:center;background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:3px 4px 3px 10px;font-size:.82rem;font-weight:500}
+.activefilter button{padding:2px 7px;border:0;background:transparent;color:inherit}
+
+/* Cartões */
+.list{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}
+@media (max-width:420px){.list{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 14px 12px;display:grid;gap:10px;min-width:0;border-left:4px solid var(--line)}
+.card.st-ok{border-left-color:var(--ok)}
+.card.st-warn{border-left-color:var(--warn)}
+.card.st-late{border-left-color:var(--bad)}
+.card.st-done{border-left-color:var(--accent)}
+.card-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.card-top>div{min-width:0}
+.card-top h3{overflow-wrap:anywhere}
+.meta{margin:2px 0 0;color:var(--muted);font-size:.84rem;overflow-wrap:anywhere}
+.val{font-family:var(--f-mono);font-size:.88rem;white-space:nowrap}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(12,1fr);gap:3px}
+.steps li{height:6px;border-radius:2px;background:var(--line)}
+.steps li.done{background:var(--accent)}
+.steps li.cur{background:var(--accent);opacity:.45;outline:1px solid var(--accent)}
+.steps li.skip{background:repeating-linear-gradient(90deg,var(--line) 0 3px,transparent 3px 5px)}
+.stage-row{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;justify-content:space-between}
+.stage-name{font-weight:600;font-size:.92rem}
+.stage-name .num{color:var(--muted);font-weight:400;margin-right:4px}
+.chip{font-family:var(--f-mono);font-size:.74rem;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.late{background:var(--bad-soft);color:var(--bad)}
+.chip.neutral{background:var(--surface-2);color:var(--muted)}
+.next{margin:0;font-size:.88rem}
+.sub{margin:0;font-size:.82rem;color:var(--warn)}
+.card-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.card-actions .spacer{flex:1}
+
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:var(--r);padding:28px;text-align:center;color:var(--muted)}
+.empty strong{display:block;color:var(--ink);font-size:1rem;margin-bottom:4px}
+.note{font-size:.8rem;color:var(--muted)}
+
+/* Diálogos */
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);padding:0;width:min(760px,calc(100vw - 24px));max-height:calc(100vh - 24px)}
+dialog::backdrop{background:rgba(10,16,22,.45)}
+.dlg{display:grid;grid-template-rows:auto 1fr auto;max-height:calc(100vh - 26px)}
+.dlg-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.dlg-body{overflow:auto;padding:16px 18px;display:grid;gap:18px}
+.dlg-foot{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--line)}
+.dlg-foot .spacer{flex:1}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.field{display:grid;gap:4px;min-width:0}
+.field.wide{grid-column:1/-1}
+fieldset{border:1px solid var(--line);border-radius:var(--r);padding:12px;margin:0;display:grid;gap:12px}
+legend{padding:0 6px;font-size:.78rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.timeline{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.timeline li{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:center;padding:5px 0;border-bottom:1px dashed var(--line);font-size:.86rem}
+.timeline li:last-child{border-bottom:0}
+.dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--line);justify-self:center}
+.timeline li.done .dot{background:var(--accent);border-color:var(--accent)}
+.timeline li.cur .dot{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.timeline li.cur{font-weight:600}
+.timeline li.skip{color:var(--muted);text-decoration:line-through}
+.log{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:.85rem}
+.log li{display:grid;grid-template-columns:auto 1fr;gap:10px}
+.log time{font-family:var(--f-mono);color:var(--muted);font-size:.78rem;padding-top:1px}
+.addnote{display:flex;gap:8px}
+.addnote input{flex:1;min-width:0}
+.slagrid{display:grid;grid-template-columns:1fr 90px;gap:6px 12px;align-items:center}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:.88rem;z-index:20}
+@media (prefers-reduced-motion:no-preference){.card{transition:border-color .2s}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Aditivos de Contrato</h1>
+      <p>Da necessidade até o saldo liberado para medição. Prazos contados em dias úteis (d.u.) desde a entrada em cada etapa.</p>
+    </div>
+    <div class="top-actions">
+      <button id="btnCsv" type="button">Exportar CSV</button>
+      <button id="btnCfg" type="button">Ajustes</button>
+      <button id="btnNew" type="button" class="primary">+ Novo aditivo</button>
+    </div>
+  </header>
+
+  <section class="summary" id="summary" aria-label="Resumo"></section>
+
+  <nav class="flow" aria-label="Etapas do fluxo"><ol id="flow"></ol></nav>
+
+  <div class="filters">
+    <input type="search" id="q" placeholder="Buscar por título, obra, empreiteiro, contrato, RM…" aria-label="Buscar">
+    <select id="fObra" aria-label="Filtrar por obra"><option value="">Todas as obras</option></select>
+    <label class="check"><input type="checkbox" id="fDone"> Mostrar liberados e arquivados</label>
+    <span id="activeStage"></span>
+  </div>
+
+  <section id="list" class="list" aria-live="polite">
+    <div class="empty" style="grid-column:1/-1"><strong>Carregando aditivos…</strong>Os dados ficam salvos na sua conta do claude.ai.</div>
+  </section>
+
+  <p class="note">Status do prazo: <span class="chip ok">dentro</span> <span class="chip warn">no limite</span> <span class="chip late">atrasado</span>. Os prazos de cada etapa e o nome do setor que sobe o saldo no contrato ficam em Ajustes.</p>
+</div>
+
+<dialog id="dlg">
+  <form class="dlg" id="frm" method="dialog">
+    <div class="dlg-head"><h2 id="dlgTitle">Novo aditivo</h2><button type="button" class="ghost" data-close>Fechar</button></div>
+    <div class="dlg-body">
+      <div class="grid">
+        <label class="field wide"><span class="label">Descrição do aditivo</span><input id="f_titulo" required placeholder="Ex.: Acréscimo de alvenaria bloco 2"></label>
+        <label class="field"><span class="label">Obra</span><input id="f_obra" list="obrasList"></label>
+        <label class="field"><span class="label">Empreiteiro</span><input id="f_empreiteiro"></label>
+        <label class="field"><span class="label">Nº do contrato</span><input id="f_contrato" class="mono"></label>
+        <label class="field"><span class="label">Valor estimado (R$)</span><input id="f_valor" inputmode="decimal" placeholder="0,00" class="mono"></label>
+      </div>
+      <fieldset>
+        <legend>Situação no fluxo</legend>
+        <div class="grid">
+          <label class="field"><span class="label">Etapa atual</span><select id="f_etapa"></select></label>
+          <label class="field"><span class="label">Entrou nessa etapa em</span><input id="f_entrada" type="date"></label>
+          <label class="field"><span class="label">Insumo existe na etapa?</span><select id="f_insumo"><option value="">Não verificado</option><option value="sim">Sim</option><option value="nao">Não (pedir alocação ao Controle)</option></select></label>
+          <label class="field"><span class="label">Alocação pedida ao Controle</span><input id="f_alocPed" type="date"></label>
+          <label class="field"><span class="label">Controle alocou em</span><input id="f_alocOk" type="date"></label>
+          <label class="field"><span class="label">Houve estouro do insumo?</span><select id="f_estouro"><option value="">Ainda não sei</option><option value="nao">Não</option><option value="sim">Sim (coord. + gerente aprovam)</option></select></label>
+          <label class="field"><span class="label">Nº da RM (Mega)</span><input id="f_rm" class="mono"></label>
+          <label class="field"><span class="label">Nº da cotação (Mega)</span><input id="f_cot" class="mono"></label>
+          <label class="field wide"><span class="label">Observações</span><textarea id="f_notas"></textarea></label>
+        </div>
+      </fieldset>
+      <section id="histBox" hidden>
+        <div class="grid">
+          <div class="field"><span class="label">Linha do tempo</span><ol class="timeline" id="timeline"></ol></div>
+          <div class="field"><span class="label">Histórico</span>
+            <div class="addnote"><input id="noteIn" placeholder="Anotar algo (ex.: cobrei o Controle por e-mail)"><button type="button" id="noteBtn">Anotar</button></div>
+            <ul class="log" id="log"></ul>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" class="danger" id="btnDel" hidden>Excluir</button>
+      <button type="button" id="btnArch" hidden>Arquivar</button>
+      <span class="spacer"></span>
+      <button type="button" data-close>Cancelar</button>
+      <button type="submit" class="primary" id="btnSave">Salvar</button>
+    </div>
+  </form>
+</dialog>
+<datalist id="obrasList"></datalist>
+
+<dialog id="cfg">
+  <form class="dlg" id="cfgFrm" method="dialog">
+    <div class="dlg-head"><h2>Ajustes</h2><button type="button" class="ghost" data-close>Fechar</button></div>
+    <div class="dlg-body">
+      <label class="field"><span class="label">Setor que sobe o saldo e gera o contrato</span><input id="c_setor" placeholder="Ex.: setor de Contratos"></label>
+      <div class="field"><span class="label">Prazo de cada etapa (dias úteis)</span><div class="slagrid" id="slaGrid"></div></div>
+    </div>
+    <div class="dlg-foot"><span class="spacer"></span><button type="button" data-close>Cancelar</button><button type="submit" class="primary">Salvar ajustes</button></div>
+  </form>
+</dialog>
+
+<script>
+const STAGES=[
+ {k:'necessidade',n:'Necessidade',a:'Entender e confirmar a necessidade do aditivo.',sla:3,who:'Você'},
+ {k:'levantamento',n:'Levantamento',a:'Levantar quantitativos e valores do aditivo.',sla:5,who:'Você'},
+ {k:'insumo',n:'Insumo na etapa',a:'Conferir no Mega se o insumo existe na etapa do serviço.',sla:2,who:'Você / Controle'},
+ {k:'rm',n:'Subir RM',a:'Subir a RM (requisição de material e serviço) no Mega.',sla:1,who:'Você'},
+ {k:'aprov_controle',n:'Aprov. Controle',a:'Acompanhar a aprovação da RM pelo Controle no Mega.',sla:4,who:'Controle'},
+ {k:'aprov_gestao',n:'Aprov. Coord./Gerente',a:'Estouro de insumo: aprovação do coordenador e do gerente de obras.',sla:3,who:'Coord. / Gerente'},
+ {k:'cotacao',n:'Cotação',a:'Fazer a cotação no Mega e enviar para aprovação de Suprimentos.',sla:3,who:'Você'},
+ {k:'aprov_suprimentos',n:'Aprov. Suprimentos',a:'Aguardar o e-mail de aprovação de Suprimentos no Outlook.',sla:3,who:'Suprimentos'},
+ {k:'encerrar',n:'Encerrar cotação',a:'Encerrar a cotação no Mega.',sla:1,who:'Você'},
+ {k:'saldo',n:'Pedir saldo',a:'Pedir por e-mail ao {setor} que suba o saldo no contrato existente.',sla:2,who:'Você'},
+ {k:'assinatura',n:'Assinaturas',a:'Contrato gerado pelo {setor}: acompanhar a assinatura de todas as partes.',sla:7,who:'{setor}'},
+ {k:'liberado',n:'Liberado p/ medir',a:'Saldo no contrato, pronto para medição.',sla:0,who:'—'}
+];
+const IDX=Object.fromEntries(STAGES.map((s,i)=>[s.k,i]));
+const ALOC_SLA=3;
+let db=null, rows=[], cfg={setor:'',sla:{}}, loaded=false, stageFilter=null, editing=null;
+const busy=new Set();
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+const parseD=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+const fmtD=s=>s?s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(2,4):'—';
+function bdays(s){if(!s)return null;const a=parseD(s),b=parseD(today());if(a>=b)return 0;let n=0;const c=new Date(a);while(c<b){c.setDate(c.getDate()+1);const w=c.getDay();if(w&&w!==6)n++}return n}
+const brl=v=>typeof v==='number'&&!isNaN(v)?v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}):'';
+const parseMoney=s=>{s=String(s||'').trim();if(!s)return null;s=s.replace(/[R$\s]/g,'');if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');const v=parseFloat(s);return isNaN(v)?null:v};
+const setor=()=>cfg.setor||'setor de contratos';
+const txt=s=>s.replace(/\{setor\}/g,setor());
+const slaOf=k=>{const v=cfg.sla&&cfg.sla[k];return typeof v==='number'?v:STAGES[IDX[k]].sla};
+
+function status(d){
+  if(d.arquivado||d.etapa==='liberado')return{cls:'done',chip:'neutral',label:d.arquivado?'Arquivado':'Liberado '+fmtD(d.entradas?.liberado)};
+  let ref=d.entradas?.[d.etapa], sla=slaOf(d.etapa), what='';
+  if(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk&&d.alocacaoSolicitada){ref=d.alocacaoSolicitada;sla=ALOC_SLA;what=' alocação'}
+  const n=bdays(ref);
+  if(n==null)return{cls:'',chip:'neutral',label:'sem data',n:0};
+  const lab=n+' d.u.'+what+' / prazo '+sla;
+  if(!sla)return{cls:'ok',chip:'neutral',label:n+' d.u.',n};
+  if(n>sla)return{cls:'late',chip:'late',label:lab,n,late:true};
+  if(n===sla)return{cls:'warn',chip:'warn',label:lab,n};
+  return{cls:'ok',chip:'ok',label:lab,n};
+}
+function skipped(d,k){return k==='aprov_gestao'&&d.estouro==='nao'}
+function nextKey(d){let i=IDX[d.etapa]+1;if(STAGES[i]&&skipped(d,STAGES[i].k))i++;return STAGES[i]?.k}
+
+function actions(d){
+  const k=d.etapa;
+  if(d.arquivado)return[{id:'desarquivar',label:'Reativar'}];
+  if(k==='insumo'){
+    if(d.insumoExiste==='nao'&&!d.alocacaoOk)return[{id:'alocado',label:'Controle alocou → subir RM',primary:1}];
+    if(!d.insumoExiste)return[{id:'insumo_sim',label:'Insumo existe → subir RM',primary:1},{id:'insumo_nao',label:'Não existe: e-mail enviado ao Controle'}];
+  }
+  if(k==='aprov_controle')return[{id:'ctrl_ok',label:'Aprovado sem estouro →',primary:1},{id:'ctrl_estouro',label:'Aprovado com estouro →'}];
+  if(k==='liberado')return[{id:'arquivar',label:'Arquivar'}];
+  const nk=nextKey(d);
+  return[{id:'adv',label:'Concluir → '+STAGES[IDX[nk]].n,primary:1}];
+}
+function nextText(d){
+  if(d.arquivado)return'Arquivado.';
+  if(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk)return'Aguardando o Controle alocar o insumo na etapa do serviço (e-mail enviado em '+fmtD(d.alocacaoSolicitada)+').';
+  return txt(STAGES[IDX[d.etapa]].a);
+}
+
+async function write(id,patch){
+  if(!db){toast('Sem conexão com o armazenamento. Abra logado no claude.ai.');return}
+  busy.add(id);render();
+  try{await db.doc('aditivos/'+id).update({...patch,atualizado:new Date().toISOString()})}
+  catch(e){toast('Não foi possível salvar ('+(e.code||'erro')+'). Tente de novo.')}
+  finally{busy.delete(id);render()}
+}
+function logPlus(d,msg){return[...(d.log||[]),{t:today(),msg}]}
+function move(d,to,extra={},msg){
+  const p={...extra,etapa:to,entradas:{[to]:today()},log:logPlus(d,msg||('Etapa: '+STAGES[IDX[to]].n))};
+  return write(d.id,p);
+}
+function doAction(id,d){
+  switch(id){
+    case'adv':return move(d,nextKey(d));
+    case'insumo_sim':return move(d,'rm',{insumoExiste:'sim'},'Insumo já existe na etapa → Subir RM');
+    case'insumo_nao':return write(d.id,{insumoExiste:'nao',alocacaoSolicitada:today(),log:logPlus(d,'Insumo não existe na etapa: e-mail ao Controle pedindo alocação')});
+    case'alocado':return move(d,'rm',{alocacaoOk:today()},'Controle alocou o insumo → Subir RM');
+    case'ctrl_ok':return move(d,'cotacao',{estouro:'nao'},'Controle aprovou, sem estouro → Cotação');
+    case'ctrl_estouro':return move(d,'aprov_gestao',{estouro:'sim'},'Controle aprovou, com estouro → Aprov. Coord./Gerente');
+    case'arquivar':return write(d.id,{arquivado:true,log:logPlus(d,'Arquivado')});
+    case'desarquivar':return write(d.id,{arquivado:false,log:logPlus(d,'Reativado')});
+  }
+}
+
+function filtered(){
+  const q=$('#q').value.trim().toLowerCase(), ob=$('#fObra').value, all=$('#fDone').checked;
+  return rows.filter(d=>{
+    if(stageFilter){if(d.etapa!==stageFilter||d.arquivado)return false}
+    else if(!all&&(d.arquivado||d.etapa==='liberado'))return false;
+    if(ob&&d.obra!==ob)return false;
+    if(q){const h=[d.titulo,d.obra,d.empreiteiro,d.contrato,d.rm,d.cotacao,d.notas].join(' ').toLowerCase();if(!h.includes(q))return false}
+    return true;
+  }).map(d=>({d,s:status(d)})).sort((a,b)=>(b.s.late?1:0)-(a.s.late?1:0)||(a.d.arquivado?1:0)-(b.d.arquivado?1:0)||IDX[b.d.etapa]-IDX[a.d.etapa]||(b.s.n||0)-(a.s.n||0));
+}
+
+function render(){
+  const active=rows.filter(d=>!d.arquivado&&d.etapa!=='liberado');
+  const late=active.filter(d=>status(d).late);
+  const waitOthers=active.filter(d=>['aprov_controle','aprov_gestao','aprov_suprimentos','assinatura'].includes(d.etapa)||(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk));
+  const total=active.reduce((s,d)=>s+(typeof d.valor==='number'?d.valor:0),0);
+  const liberadosMes=rows.filter(d=>d.etapa==='liberado'&&(d.entradas?.liberado||'').slice(0,7)===today().slice(0,7)).length;
+  $('#summary').innerHTML=loaded?`
+    <div><b>${active.length}</b><span class="muted">em andamento</span></div>
+    <div class="${late.length?'bad':''}"><b>${late.length}</b><span class="muted">fora do prazo</span></div>
+    <div><b>${waitOthers.length}</b><span class="muted">aguardando outros setores</span></div>
+    <div><b>${active.length-waitOthers.length}</b><span class="muted">com ação sua</span></div>
+    <div><b>${liberadosMes}</b><span class="muted">liberados este mês</span></div>
+    ${total?`<div><b>${esc(brl(total))}</b><span class="muted">em aditivos abertos</span></div>`:''}`:'';
+
+  $('#flow').innerHTML=STAGES.map((s,i)=>{
+    const here=rows.filter(d=>d.etapa===s.k&&!d.arquivado), lt=here.filter(d=>status(d).late).length;
+    return`<li><button type="button" data-stage="${s.k}" aria-pressed="${stageFilter===s.k}">
+      <span class="n">${pad(i+1)}</span><span class="nm">${esc(s.n)}</span>
+      <span class="ct ${here.length?'':'zero'}">${here.length}</span><span class="who">${esc(txt(s.who))}</span>
+      ${lt?`<span class="lt">${lt} atras.</span>`:''}</button></li>`}).join('');
+
+  $('#activeStage').innerHTML=stageFilter?`<span class="activefilter">Etapa: ${esc(STAGES[IDX[stageFilter]].n)}<button type="button" data-clearstage aria-label="Limpar filtro de etapa">×</button></span>`:'';
+
+  const obras=[...new Set(rows.map(d=>d.obra).filter(Boolean))].sort();
+  const sel=$('#fObra'), cur=sel.value;
+  sel.innerHTML='<option value="">Todas as obras</option>'+obras.map(o=>`<option ${o===cur?'selected':''}>${esc(o)}</option>`).join('');
+  $('#obrasList').innerHTML=obras.map(o=>`<option value="${esc(o)}">`).join('');
+
+  const list=$('#list');
+  if(!db&&loaded){list.innerHTML=`<div class="empty" style="grid-column:1/-1"><strong>Não foi possível acessar seus dados</strong>Abra este painel logado na sua conta do claude.ai para ver e salvar os aditivos.</div>`;return}
+  if(!loaded)return;
+  const items=filtered();
+  if(!rows.length){list.innerHTML=`<div class="empty" style="grid-column:1/-1"><strong>Nenhum aditivo cadastrado</strong>Clique em “+ Novo aditivo” para registrar o primeiro.</div>`;return}
+  if(!items.length){list.innerHTML=`<div class="empty" style="grid-column:1/-1"><strong>Nada com esses filtros</strong>Limpe a busca ou escolha outra etapa.</div>`;return}
+  list.innerHTML=items.map(({d,s})=>{
+    const i=IDX[d.etapa];
+    const steps=STAGES.map((st,j)=>`<li class="${skipped(d,st.k)?'skip':j<i||d.etapa==='liberado'?'done':j===i?'cur':''}" title="${esc(st.n)}"></li>`).join('');
+    const b=busy.has(d.id);
+    const acts=actions(d).map(a=>`<button type="button" class="${a.primary?'primary':''}" data-act="${a.id}" data-id="${esc(d.id)}" ${b?'disabled':''}>${esc(a.label)}</button>`).join('');
+    const meta=[d.obra,d.empreiteiro,d.contrato?'<span class="mono">CT '+esc(d.contrato)+'</span>':''].filter(Boolean).map(x=>x.startsWith('<span')?x:esc(x)).join(' · ');
+    const ids=[d.rm?'RM '+esc(d.rm):'',d.cotacao?'Cot. '+esc(d.cotacao):''].filter(Boolean).join(' · ');
+    return`<article class="card st-${s.cls}">
+      <div class="card-top"><div><h3>${esc(d.titulo||'(sem descrição)')}</h3><p class="meta">${meta||'—'}</p></div>${d.valor!=null?`<div class="val">${esc(brl(d.valor))}</div>`:''}</div>
+      <ol class="steps" aria-label="Etapa ${i+1} de 12">${steps}</ol>
+      <div class="stage-row"><span class="stage-name"><span class="num">${pad(i+1)}/12</span>${esc(STAGES[i].n)}</span><span class="chip ${s.chip}">${esc(s.label)}</span></div>
+      <p class="next">${esc(nextText(d))}</p>
+      ${d.estouro==='sim'&&i<=IDX.aprov_gestao?'<p class="sub">Com estouro de insumo: precisa de coord. + gerente.</p>':''}
+      <div class="card-actions">${acts}<span class="spacer"></span>${ids?`<span class="mono muted" style="font-size:.78rem">${ids}</span>`:''}<button type="button" class="ghost" data-open="${esc(d.id)}">Detalhes</button></div>
+    </article>`}).join('');
+}
+
+/* Diálogo de aditivo */
+$('#f_etapa').innerHTML=STAGES.map((s,i)=>`<option value="${s.k}">${pad(i+1)} · ${esc(s.n)}</option>`).join('');
+function openDlg(d){
+  editing=d||null;
+  $('#dlgTitle').textContent=d?'Detalhes do aditivo':'Novo aditivo';
+  const v=(id,val)=>{$(id).value=val??''};
+  v('#f_titulo',d?.titulo);v('#f_obra',d?.obra);v('#f_empreiteiro',d?.empreiteiro);v('#f_contrato',d?.contrato);
+  v('#f_valor',d?.valor!=null?d.valor.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');
+  v('#f_etapa',d?.etapa||'necessidade');v('#f_entrada',d?(d.entradas?.[d.etapa]||''):today());
+  v('#f_insumo',d?.insumoExiste);v('#f_alocPed',d?.alocacaoSolicitada);v('#f_alocOk',d?.alocacaoOk);v('#f_estouro',d?.estouro);
+  v('#f_rm',d?.rm);v('#f_cot',d?.cotacao);v('#f_notas',d?.notas);
+  $('#histBox').hidden=!d;$('#btnDel').hidden=!d;$('#btnArch').hidden=!d;
+  resetDel();
+  if(d){
+    $('#btnArch').textContent=d.arquivado?'Reativar':'Arquivar';
+    const i=IDX[d.etapa];
+    $('#timeline').innerHTML=STAGES.map((s,j)=>{const c=skipped(d,s.k)?'skip':(j<i||d.etapa==='liberado')?'done':j===i?'cur':'';
+      return`<li class="${c}"><span class="dot"></span><span>${esc(s.n)}</span><span class="mono muted">${c==='skip'?'não se aplica':fmtD(d.entradas?.[s.k])}</span></li>`}).join('');
+    renderLog(d);
+  }
+  $('#dlg').showModal();
+}
+function renderLog(d){$('#log').innerHTML=[...(d.log||[])].reverse().map(l=>`<li><time>${fmtD(l.t)}</time><span>${esc(l.msg)}</span></li>`).join('')||'<li class="muted">Sem registros.</li>'}
+
+$('#frm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  if(!db){toast('Sem conexão com o armazenamento.');return}
+  const g=id=>$(id).value.trim();
+  const etapa=g('#f_etapa'), entrada=g('#f_entrada')||today();
+  const base={titulo:g('#f_titulo'),obra:g('#f_obra'),empreiteiro:g('#f_empreiteiro'),contrato:g('#f_contrato'),valor:parseMoney(g('#f_valor')),
+    etapa,insumoExiste:g('#f_insumo')||null,alocacaoSolicitada:g('#f_alocPed')||null,alocacaoOk:g('#f_alocOk')||null,estouro:g('#f_estouro')||null,
+    rm:g('#f_rm'),cotacao:g('#f_cot'),notas:$('#f_notas').value,atualizado:new Date().toISOString()};
+  const btn=$('#btnSave');btn.disabled=true;
+  try{
+    if(!editing){
+      await db.collection('aditivos').add({...base,entradas:{[etapa]:entrada},criado:today(),arquivado:false,log:[{t:today(),msg:'Cadastrado na etapa '+STAGES[IDX[etapa]].n}]});
+      toast('Aditivo cadastrado');
+    }else{
+      const p={...base,entradas:{[etapa]:entrada}};
+      if(etapa!==editing.etapa)p.log=logPlus(editing,'Etapa ajustada manualmente: '+STAGES[IDX[etapa]].n);
+      await db.doc('aditivos/'+editing.id).update(p);
+      toast('Alterações salvas');
+    }
+    $('#dlg').close();
+  }catch(err){toast('Não foi possível salvar ('+(err.code||'erro')+').')}
+  finally{btn.disabled=false}
+});
+$('#noteBtn').addEventListener('click',async()=>{
+  const m=$('#noteIn').value.trim();if(!m||!editing)return;
+  const log=logPlus(editing,m);$('#noteIn').value='';
+  editing={...editing,log};renderLog(editing);
+  try{await db.doc('aditivos/'+editing.id).update({log,atualizado:new Date().toISOString()})}catch(e){toast('Não foi possível anotar.')}
+});
+$('#noteIn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#noteBtn').click()}});
+let delTimer=null;
+function resetDel(){clearTimeout(delTimer);$('#btnDel').textContent='Excluir';$('#btnDel').dataset.armed=''}
+$('#btnDel').addEventListener('click',async()=>{
+  const b=$('#btnDel');
+  if(!b.dataset.armed){b.dataset.armed='1';b.textContent='Confirmar exclusão';delTimer=setTimeout(resetDel,4000);return}
+  try{await db.doc('aditivos/'+editing.id).delete();$('#dlg').close();toast('Aditivo excluído')}catch(e){toast('Não foi possível excluir.')}
+});
+$('#btnArch').addEventListener('click',async()=>{
+  const d=editing;$('#dlg').close();await doAction(d.arquivado?'desarquivar':'arquivar',d);
+});
+
+/* Ajustes */
+function openCfg(){
+  $('#c_setor').value=cfg.setor||'';
+  $('#slaGrid').innerHTML=STAGES.filter(s=>s.k!=='liberado').map(s=>`<label for="sla_${s.k}">${esc(s.n)}</label><input id="sla_${s.k}" type="number" min="0" max="60" class="mono" value="${slaOf(s.k)}">`).join('')+
+   `<label for="sla_aloc">Alocação do insumo pelo Controle</label><input id="sla_aloc" type="number" class="mono" value="${ALOC_SLA}" disabled>`;
+  $('#cfg').showModal();
+}
+$('#cfgFrm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const sla={};STAGES.forEach(s=>{const el=$('#sla_'+s.k);if(el)sla[s.k]=Math.max(0,parseInt(el.value,10)||0)});
+  try{await db.doc('config/geral').set({setor:$('#c_setor').value.trim(),sla});$('#cfg').close();toast('Ajustes salvos')}catch(err){toast('Não foi possível salvar os ajustes.')}
+});
+
+/* CSV */
+async function exportCsv(){
+  const head=['Descrição','Obra','Empreiteiro','Contrato','Valor','Etapa nº','Etapa','Entrou na etapa','Dias úteis na etapa','Prazo','Situação','Insumo existe','Estouro','RM','Cotação','Cadastrado','Arquivado','Observações'];
+  const lines=rows.map(d=>{const s=status(d),i=IDX[d.etapa];return[d.titulo,d.obra,d.empreiteiro,d.contrato,d.valor!=null?String(d.valor).replace('.',','):'',i+1,STAGES[i].n,fmtD(d.entradas?.[d.etapa]),s.n??'',slaOf(d.etapa),s.late?'Atrasado':s.cls==='warn'?'No limite':s.cls==='done'?'Concluído':'No prazo',d.insumoExiste||'',d.estouro||'',d.rm,d.cotacao,fmtD(d.criado),d.arquivado?'sim':'',d.notas]});
+  const csv='﻿'+[head,...lines].map(r=>r.map(c=>{c=String(c??'');return/[;"\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c}).join(';')).join('\r\n');
+  try{const dl=await claude.use('downloads');if(!dl){toast('Exportação indisponível nesta visualização.');return}
+    await dl.save({filename:'aditivos-'+today()+'.csv',data:new Blob([csv],{type:'text/csv;charset=utf-8'})})}
+  catch(e){if(e&&e.code&&e.code!=='dismissed'&&e.code!=='declined')toast('Exportação não concluída.')}
+}
+
+/* Eventos */
+document.addEventListener('click',e=>{
+  const t=e.target.closest('button');if(!t)return;
+  if(t.dataset.stage){stageFilter=stageFilter===t.dataset.stage?null:t.dataset.stage;render();return}
+  if('clearstage' in t.dataset){stageFilter=null;render();return}
+  if(t.dataset.act){const d=rows.find(r=>r.id===t.dataset.id);if(d)doAction(t.dataset.act,d);return}
+  if(t.dataset.open){const d=rows.find(r=>r.id===t.dataset.open);if(d)openDlg(d);return}
+  if('close' in t.dataset){t.closest('dialog').close();return}
+});
+$('#btnNew').onclick=()=>openDlg(null);
+$('#btnCfg').onclick=openCfg;
+$('#btnCsv').onclick=exportCsv;
+['#q','#fObra','#fDone'].forEach(s=>$(s).addEventListener('input',render));
+
+let toastT;
+function toast(m){let el=$('.toast');if(!el){el=document.createElement('div');el.className='toast';el.setAttribute('role','status');document.body.appendChild(el)}el.textContent=m;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>el.hidden=true,2600)}
+
+/* Dados */
+render();
+(async()=>{
+  const timer=setTimeout(()=>{if(!loaded){loaded=true;render();toast('Os dados estão demorando para carregar…')}},10000);
+  for(let i=0;i<30&&!window.claude;i++)await new Promise(r=>setTimeout(r,100));
+  try{db=window.claude?await claude.use('db'):null}catch(e){db=null}
+  if(!db){clearTimeout(timer);loaded=true;render();return}
+  db.doc('config/geral').onSnapshot(s=>{cfg=s.exists?{setor:'',sla:{},...s.data()}:{setor:'',sla:{}};render()},()=>{});
+  db.collection('aditivos').onSnapshot(s=>{
+    rows=s.docs.map(x=>({id:x.id,...x.data()})).filter(d=>IDX[d.etapa]!=null);
+    if(!s.metadata.fromCache){clearTimeout(timer)}
+    loaded=true;
+    if(editing){const fresh=rows.find(r=>r.id===editing.id);if(fresh){editing=fresh;if($('#dlg').open)renderLog(fresh)}}
+    render();
+  },e=>{clearTimeout(timer);loaded=true;render();toast('Conexão com os dados perdida. Recarregue a página.')});
+})();
+// Atualiza contagem de dias quando a data vira
+setInterval(()=>{const t=today();if(t!==window.__d){window.__d=t;render()}},60000);window.__d=today();
+</script>
