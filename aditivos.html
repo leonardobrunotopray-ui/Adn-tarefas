@@ -825,14 +825,25 @@ const IMP_FIELDS=[
  {k:'empreiteiro',n:'Empreiteiro / fornecedor',pats:[/empreiteir/,/fornecedor/,/credor/,/razao social/,/agente/]},
  {k:'valor',n:'Valor (R$)',pats:[/^(valor|vl|vlr) total$/,/^valor$/,/^total$/,/valor|vlr/]},
  {k:'status',n:'Status / situação',pats:[/^status$/,/^situacao$/,/situacao|status/,/fase/]},
- {k:'motivo',n:'Motivo (reprova / cancelamento)',pats:[/^motivo$/,/motivo/,/justificativ/,/parecer/]}
+ {k:'motivo',n:'Motivo (reprova / cancelamento)',pats:[/^motivo$/,/motivo/,/justificativ/,/parecer/]},
+ {k:'data',n:'Data da atualização',pats:[/^(data|dt)$/,/ultima atualizac|atualizad|data (da |de )?(situacao|status|movimentac|aprovac|reprovac|alterac)/,/^(data|dt)\b/]}
 ];
-const IMP_LABEL={rm:'RM',cotacao:'cotação',contrato:'contrato',titulo:'descrição',obra:'obra',empreiteiro:'empreiteiro',valor:'valor',etapa:'etapa',arquivado:'cancelado',reprova:'reprovado pelo Controle',motivo:'motivo'};
+const IMP_LABEL={rm:'RM',cotacao:'cotação',contrato:'contrato',titulo:'descrição',obra:'obra',empreiteiro:'empreiteiro',valor:'valor',etapa:'etapa',arquivado:'cancelado',reprova:'reprovado pelo Controle',reprovaN:'reprova nº',motivo:'motivo'};
 let imp=null, impCfg={};
 const norm=s=>String(s??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 const keyOf=v=>{let s=String(v??'').trim();if(/^\d+\.0+$/.test(s))s=s.split('.')[0];return s.replace(/[^0-9a-z]/gi,'').toUpperCase().replace(/^0+(?=.)/,'')};
 const cellStr=v=>v instanceof Date?v.toLocaleDateString('pt-BR'):String(v??'').trim();
 const cellNum=v=>typeof v==='number'?v:parseMoney(v);
+// Data/hora comparável ("AAAA-MM-DD HH:MM"), ou '' se não der para ler
+function cellDate(v){
+  if(v instanceof Date&&!isNaN(v))return v.getFullYear()+'-'+pad(v.getMonth()+1)+'-'+pad(v.getDate())+' '+pad(v.getHours())+':'+pad(v.getMinutes());
+  if(typeof v==='number'&&v>20000&&v<80000){const d=new Date(Math.round((v-25569)*864e5));return d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate())+' '+pad(d.getUTCHours())+':'+pad(d.getUTCMinutes())}
+  const t=String(v??'').trim();let m=t.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})(?:\D+(\d{1,2}):(\d{2}))?/);
+  if(m){const y=m[3].length===2?'20'+m[3]:m[3];return y+'-'+pad(+m[2])+'-'+pad(+m[1])+' '+pad(+(m[4]||0))+':'+(m[5]||'00')}
+  m=t.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
+  if(m)return m[1]+'-'+m[2]+'-'+m[3]+' '+(m[4]||'00')+':'+(m[5]||'00');
+  return'';
+}
 let xlsxP=null;
 function loadXlsx(){return xlsxP||(xlsxP=new Promise((ok,ko)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=()=>ok(window.XLSX);s.onerror=()=>{xlsxP=null;s.remove();ko(new Error('xlsx'))};document.head.appendChild(s)}))}
 function decodeTxt(buf){try{return new TextDecoder('utf-8',{fatal:true}).decode(buf)}catch(e){return new TextDecoder('windows-1252').decode(buf)}}
@@ -878,7 +889,7 @@ function impStep1(){
   $('#impBody').innerHTML=`<label class="drop" id="impDrop"><strong>Escolha a planilha exportada do Mega</strong>
     <span class="muted">Excel (.xlsx, .xls) ou CSV. Também dá para arrastar o arquivo até aqui.</span>
     <input type="file" id="impFile" accept=".xlsx,.xls,.xlsm,.csv,.txt"></label>
-    <p class="note">Nada é gravado antes de você conferir. Os aditivos da planilha são ligados aos do painel pelo nº da RM, depois pelo nº da cotação e, por último, pelo nº do contrato. A etapa só avança, nunca volta.</p>`;
+    <p class="note">Nada é gravado antes de você conferir. Os aditivos da planilha são ligados aos do painel pelo nº da RM, depois pelo nº da cotação e, por último, pelo nº do contrato. A etapa só avança, com uma exceção: se a última atualização de uma RM for uma reprova do Controle, o aditivo volta para Correção da RM.</p>`;
   $('#impFoot').innerHTML='<span class="spacer"></span><button type="button" data-close>Cancelar</button>';
   const dz=$('#impDrop');
   $('#impFile').onchange=e=>{const f=e.target.files[0];if(f)impLoad(f)};
@@ -924,7 +935,7 @@ function renderStBox(){
   const stOpts=v=>{const cur=imp.stmap[v]??guessStage(v);return`<option value="">Não mudar a etapa</option>${STAGES.map((s,i)=>`<option value="${s.k}" ${cur===s.k?'selected':''}>${pad(i+1)} · ${esc(s.n)}</option>`).join('')}<option value="__rep" ${cur==='__rep'?'selected':''}>Reprovado pelo Controle (vai p/ Correção da RM)</option><option value="__arq" ${cur==='__arq'?'selected':''}>Cancelado (arquivar)</option>`};
   box.innerHTML=`<div class="field"><span class="label">Cada status do Mega leva para qual etapa?</span>
     <div class="maprow">${vals.map((v,i)=>`<label for="st_${i}">${esc(v)}</label><select id="st_${i}" data-st="${esc(v)}">${stOpts(v)}</select>`).join('')}</div>
-    <span class="note">Fica salvo para as próximas importações. Um aditivo só avança: se no painel ele já estiver numa etapa mais à frente, a etapa é mantida.</span></div>`;
+    <span class="note">Fica salvo para as próximas importações. Um aditivo só avança: se no painel ele já estiver numa etapa mais à frente, a etapa é mantida. A exceção é a reprova: vale a última atualização de cada RM (pela coluna de data ou, sem ela, pela última linha) e, se for reprova, o aditivo volta para Correção da RM.</span></div>`;
 }
 function buildPlan(){
   const M=imp.map, get=(r,k)=>M[k]>=0?r[M[k]]:'';
@@ -937,7 +948,9 @@ function buildPlan(){
     g.n++;
     for(const k of ['rm','cotacao','contrato','titulo','obra','empreiteiro','motivo'])if(!g.raw[k]){const v=cellStr(get(r,k));if(v)g.raw[k]=v}
     const v=M.valor>=0?cellNum(get(r,'valor')):null;if(v!=null)g.valor=Math.round(((g.valor||0)+v)*100)/100;
-    if(!g.status)g.status=cellStr(get(r,'status'));
+    // Status que vale = o da última atualização: maior data; sem data, a última linha da planilha
+    const stv=cellStr(get(r,'status')), dt=M.data>=0?cellDate(get(r,'data')):'';
+    if(stv&&(!g.status||(dt?(!g.statusAt||dt>=g.statusAt):!g.statusAt))){g.status=stv;if(dt)g.statusAt=dt;g.lastMot=cellStr(get(r,'motivo'))}
   }
   const ix={rm:new Map(),cotacao:new Map(),contrato:new Map()};
   rows.forEach(d=>Object.keys(ix).forEach(t=>{const k=keyOf(d[t]);if(k){if(!ix[t].has(k))ix[t].set(k,[]);ix[t].get(k).push(d)}}));
@@ -968,19 +981,22 @@ function buildPlan(){
     for(const k of ['rm','cotacao','contrato'])if(g.raw[k]&&keyOf(d[k])!==keyOf(g.raw[k]))put(k,g.raw[k]);
     for(const k of ['titulo','obra','empreiteiro'])if(g.raw[k]&&!String(d[k]||'').trim())put(k,g.raw[k]);
     if(g.valor!=null&&(typeof d.valor!=='number'||Math.abs(d.valor-g.valor)>0.005))put('valor',g.valor);
-    const mot=g.raw.motivo||'';
+    const mot=g.lastMot||g.raw.motivo||'';
     if(st==='__arq'){
       if(!d.arquivado){put('arquivado',true);Object.assign(patch,{motivoTipo:'cancelamento',motivoData:today()});if(mot)put('motivo',mot)}
       else if(isCancel(d)&&mot&&mot!==d.motivo)put('motivo',mot);
     }else if(st==='__rep'){
-      // Reprova nova (ou com outro motivo) e o aditivo ainda não passou da aprovação: vai para Correção da RM
-      const nova=d.motivoTipo!=='reprova'||(mot&&mot!==d.motivo);
-      if(!d.arquivado&&nova&&IDX[d.etapa]>=IDX.rm&&IDX[d.etapa]<=IDX.aprov_gestao){
-        ch.push({k:'reprova',from:false,to:true});
-        Object.assign(patch,{motivoTipo:'reprova',motivoData:today(),reprovaResolvida:false,teveReprova:true,reprovas:(d.reprovas||0)+1});
-        if(mot)put('motivo',mot);
-        if(d.etapa!=='correcao_rm'){put('etapa','correcao_rm');patch.entradas={correcao_rm:today()}}
-      }else if(repAberta(d)&&mot&&!d.motivo)put('motivo',mot);
+      // A última atualização da RM é uma reprova: sempre volta para Correção da RM e o prazo recomeça.
+      // Só não mexe se o aditivo já está em Correção por essa mesma reprova (sem data mais nova na planilha).
+      const repDate=(g.statusAt||'').slice(0,10)||today();
+      const mesma=d.etapa==='correcao_rm'&&repAberta(d)&&(!g.statusAt||(d.motivoData&&repDate<=d.motivoData));
+      if(!d.arquivado&&d.etapa!=='liberado'&&!mesma){
+        const n=(d.reprovas||(d.motivoTipo==='reprova'?1:0))+1;
+        ch.push({k:'reprovaN',from:n-1||null,to:n});
+        Object.assign(patch,{motivoTipo:'reprova',motivoData:repDate,reprovaResolvida:false,teveReprova:true,reprovas:n});
+        if(mot&&mot!==d.motivo)put('motivo',mot);
+        put('etapa','correcao_rm');patch.entradas={correcao_rm:repDate};
+      }else if(mesma&&mot&&mot!==d.motivo)put('motivo',mot);
     }else if(st&&!d.arquivado&&IDX[st]>IDX[d.etapa]){put('etapa',st);patch.entradas={[st]:today()};Object.assign(patch,resolveRep(d,st))}
     plan.push({type:ch.length?'upd':'same',id,g,d,patch,ch});
   }
@@ -1020,7 +1036,7 @@ async function impApply(){
   const b=$('#impApply');b.disabled=true;b.textContent='Gravando…';
   const r=await Promise.allSettled(chosen.map(p=>p.type==='new'?db.collection('aditivos').add(p.doc):
     db.doc('aditivos/'+p.d.id).update({...p.patch,atualizado:new Date().toISOString(),
-      log:logPlus(p.d,'Atualizado pela planilha do Mega: '+p.ch.map(x=>x.k==='etapa'?'etapa → '+STAGES[IDX[x.to]].n:x.k==='arquivado'?'cancelado':x.k==='reprova'?'reprovado pelo Controle':IMP_LABEL[x.k]+' '+fmtImp(x.k,x.to)).join(', '))})));
+      log:logPlus(p.d,'Atualizado pela planilha do Mega: '+p.ch.map(x=>x.k==='etapa'?'etapa → '+STAGES[IDX[x.to]].n:x.k==='arquivado'?'cancelado':x.k==='reprova'?'reprovado pelo Controle':x.k==='reprovaN'?'reprovado pelo Controle ('+x.to+'ª reprova)':IMP_LABEL[x.k]+' '+fmtImp(x.k,x.to)).join(', '))})));
   const cols={};IMP_FIELDS.forEach(f=>{if(imp.map[f.k]>=0)cols[f.k]=imp.headers[imp.map[f.k]]});
   try{await db.doc('config/importMega').set({cols,status:imp.stmap})}catch(e){}
   const fail=r.filter(x=>x.status==='rejected').length;
