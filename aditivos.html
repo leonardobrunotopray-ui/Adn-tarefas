@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-/* Layout: painel operacional — régua do fluxo (13 etapas) no topo, fila de aditivos em cartões abaixo, detalhe em diálogo. */
+/* Layout: painel operacional — régua do fluxo (15 etapas) no topo, fila de aditivos em cartões abaixo, detalhe em diálogo. */
 :root{
   --bg:#eef1f4; --surface:#ffffff; --surface-2:#f6f8fa; --ink:#16202a; --muted:#5a6774; --line:#d6dce3;
   --accent:#1c5d8f; --accent-soft:#e3eef7; --accent-ink:#ffffff;
@@ -55,7 +55,7 @@ header.top p{margin:4px 0 0;color:var(--muted);max-width:62ch}
 
 /* Régua do fluxo */
 .flow{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
-.flow ol{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(13,minmax(88px,1fr));min-width:1160px}
+.flow ol{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(15,minmax(84px,1fr));min-width:1300px}
 .flow li{border-right:1px solid var(--line)}
 .flow li:last-child{border-right:0}
 .flow button{width:100%;height:100%;border:0;border-radius:0;background:transparent;text-align:left;padding:10px 10px 12px;display:grid;gap:4px;align-content:start;position:relative}
@@ -92,7 +92,7 @@ textarea{resize:vertical;min-height:70px}
 .card-top h3{overflow-wrap:anywhere}
 .meta{margin:2px 0 0;color:var(--muted);font-size:.84rem;overflow-wrap:anywhere}
 .val{font-family:var(--f-mono);font-size:.88rem;white-space:nowrap}
-.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(13,1fr);gap:3px}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(15,1fr);gap:3px}
 .steps li{height:6px;border-radius:2px;background:var(--line)}
 .steps li.done{background:var(--accent)}
 .steps li.cur{background:var(--accent);opacity:.45;outline:1px solid var(--accent)}
@@ -360,6 +360,8 @@ const STAGES=[
  {k:'insumo',n:'Insumo na etapa',a:'Conferir no Mega se o insumo existe na etapa do serviço.',sla:2,who:'Você / Controle'},
  {k:'rm',n:'Subir RM',a:'Subir a RM (requisição de material e serviço) no Mega.',sla:1,who:'Você'},
  {k:'aprov_controle',n:'Aprov. Controle',a:'Acompanhar a aprovação da RM pelo Controle no Mega.',sla:4,who:'Controle'},
+ {k:'correcao_rm',n:'Correção da RM',a:'RM reprovada pelo Controle: corrigir e reenviar a RM no Mega.',sla:2,who:'Você'},
+ {k:'reaprovacao',n:'Reaprovação Controle',a:'Acompanhar a reaprovação da RM corrigida pelo Controle.',sla:3,who:'Controle'},
  {k:'aprov_gestao',n:'Aprov. Coord./Gerente',a:'Estouro de insumo: aprovação do coordenador e do gerente de obras.',sla:3,who:'Coord. / Gerente'},
  {k:'cotacao',n:'Cotação',a:'Fazer a cotação no Mega e enviar para aprovação de Suprimentos.',sla:3,who:'Você'},
  {k:'aprov_suprimentos',n:'Aprov. Suprimentos',a:'Aguardar o e-mail de aprovação de Suprimentos no Outlook.',sla:3,who:'Suprimentos'},
@@ -430,8 +432,9 @@ function tagsFor(d){
   if(!d.arquivado){const k=ckDone(d);t.push(`<span class="chip ${k===6?'ok':'neutral'}">Checklist ${k}/6</span>`)}
   return t.length?`<div class="stage-row" style="justify-content:flex-start">${t.join('')}</div>`:'';
 }
-function skipped(d,k){return(k==='aprov_gestao'&&d.estouro==='nao')||(k==='criar_insumo'&&d.insumoCadastro!=='nao')}
-function nextKey(d){let i=IDX[d.etapa]+1;if(STAGES[i]&&skipped(d,STAGES[i].k))i++;return STAGES[i]?.k}
+const teveRep=d=>!!d.teveReprova||d.motivoTipo==='reprova';
+function skipped(d,k){return(k==='aprov_gestao'&&d.estouro==='nao')||((k==='correcao_rm'||k==='reaprovacao')&&!teveRep(d))||(k==='criar_insumo'&&d.insumoCadastro!=='nao')}
+function nextKey(d){let i=IDX[d.etapa]+1;while(STAGES[i]&&skipped(d,STAGES[i].k))i++;return STAGES[i]?.k}
 
 function actions(d){
   const k=d.etapa;
@@ -443,7 +446,8 @@ function actions(d){
     if(d.insumoExiste==='nao'&&!d.alocacaoOk)return[{id:'alocado',label:'Controle alocou → subir RM',primary:1}];
     if(!d.insumoExiste)return[{id:'insumo_sim',label:'Insumo existe → subir RM',primary:1},{id:'insumo_nao',label:'Não existe: e-mail enviado ao Controle'}];
   }
-  if(k==='aprov_controle')return[{id:'ctrl_ok',label:'Aprovado sem estouro →',primary:1},{id:'ctrl_estouro',label:'Aprovado com estouro →'},{id:'ctrl_rep',label:'Reprovado…'}];
+  if(k==='correcao_rm')return[{id:'adv',label:'RM corrigida e reenviada → Reaprovação',primary:1}];
+  if(k==='aprov_controle'||k==='reaprovacao')return[{id:'ctrl_ok',label:'Aprovado sem estouro →',primary:1},{id:'ctrl_estouro',label:'Aprovado com estouro →'},{id:'ctrl_rep',label:'Reprovado…'}];
   if(k==='liberado')return[{id:'arquivar',label:'Arquivar'}];
   const nk=nextKey(d);
   return[{id:'adv',label:'Concluir → '+STAGES[IDX[nk]].n,primary:1}];
@@ -451,10 +455,11 @@ function actions(d){
 const isCancel=d=>d.motivoTipo==='cancelamento';
 const repAberta=d=>d.motivoTipo==='reprova'&&!d.reprovaResolvida;
 // Ao sair da etapa "Subir RM" depois de uma reprova, a reprova conta como resolvida
-const resolveRep=(d,to)=>repAberta(d)&&to!=='rm'&&IDX[to]>IDX.rm?{reprovaResolvida:true}:{};
+const resolveRep=(d,to)=>repAberta(d)&&IDX[to]>IDX.reaprovacao?{reprovaResolvida:true}:{};
 function nextText(d){
   if(d.arquivado)return isCancel(d)?'Cancelado.':'Arquivado.';
   if(d.etapa==='rm'&&repAberta(d))return'RM reprovada pelo Controle: corrigir e subir a RM de novo no Mega.';
+  if(d.etapa==='correcao_rm'&&(d.reprovas||0)>1)return'RM reprovada de novo ('+d.reprovas+'ª reprova): corrigir e reenviar no Mega.';
   if(d.etapa==='criar_insumo')return'Aguardando o Orçamento criar o insumo no cadastro'+(d.orcPedido?' (pedido em '+fmtD(d.orcPedido)+').':'.');
   if(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk&&!d.alocacaoSolicitada)return'Insumo não existe na etapa: pedir ao Controle, por e-mail, que aloque o insumo na etapa do serviço.';
   if(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk)return'Aguardando o Controle alocar o insumo na etapa do serviço (e-mail enviado em '+fmtD(d.alocacaoSolicitada)+').';
@@ -483,7 +488,7 @@ $('#motFrm').addEventListener('submit',e=>{e.preventDefault();const m=$('#motIn'
 $('#mot').addEventListener('close',()=>{if(motResolve){motResolve(null);motResolve=null}});
 async function reprovar(d){
   const m=await askMotivo('Reprovado pelo Controle',d.titulo||'','Registrar reprova');if(!m)return;
-  return move(d,'rm',{motivoTipo:'reprova',motivo:m,motivoData:today(),reprovaResolvida:false},'Reprovado pelo Controle: '+m+' → corrigir e subir a RM de novo');
+  return move(d,'correcao_rm',{motivoTipo:'reprova',motivo:m,motivoData:today(),reprovaResolvida:false,teveReprova:true,reprovas:(d.reprovas||0)+1},(d.etapa==='reaprovacao'?'Reprovado de novo pelo Controle: ':'Reprovado pelo Controle: ')+m+' → Correção da RM');
 }
 async function cancelar(d){
   const m=await askMotivo('Cancelar aditivo',d.titulo||'','Cancelar aditivo');if(!m)return;
@@ -522,7 +527,7 @@ function render(){
   renderBulk();
   const active=rows.filter(d=>!d.arquivado&&d.etapa!=='liberado');
   const late=active.filter(d=>status(d).late);
-  const waitOthers=active.filter(d=>['aprov_controle','aprov_gestao','aprov_suprimentos','assinatura'].includes(d.etapa)||(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk));
+  const waitOthers=active.filter(d=>['aprov_controle','reaprovacao','aprov_gestao','aprov_suprimentos','assinatura'].includes(d.etapa)||(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk));
   const total=active.reduce((s,d)=>s+(typeof d.valor==='number'?d.valor:0),0);
   const liberadosMes=rows.filter(d=>d.etapa==='liberado'&&(d.entradas?.liberado||'').slice(0,7)===today().slice(0,7)).length;
   $('#summary').innerHTML=loaded?`
@@ -916,7 +921,7 @@ function renderStBox(){
   if(c<0){box.innerHTML='';return}
   const vals=[...new Set(imp.data.map(r=>cellStr(r[c])).filter(Boolean))].slice(0,40);
   if(!vals.length){box.innerHTML='';return}
-  const stOpts=v=>{const cur=imp.stmap[v]??guessStage(v);return`<option value="">Não mudar a etapa</option>${STAGES.map((s,i)=>`<option value="${s.k}" ${cur===s.k?'selected':''}>${pad(i+1)} · ${esc(s.n)}</option>`).join('')}<option value="__rep" ${cur==='__rep'?'selected':''}>Reprovado pelo Controle (volta p/ Subir RM)</option><option value="__arq" ${cur==='__arq'?'selected':''}>Cancelado (arquivar)</option>`};
+  const stOpts=v=>{const cur=imp.stmap[v]??guessStage(v);return`<option value="">Não mudar a etapa</option>${STAGES.map((s,i)=>`<option value="${s.k}" ${cur===s.k?'selected':''}>${pad(i+1)} · ${esc(s.n)}</option>`).join('')}<option value="__rep" ${cur==='__rep'?'selected':''}>Reprovado pelo Controle (vai p/ Correção da RM)</option><option value="__arq" ${cur==='__arq'?'selected':''}>Cancelado (arquivar)</option>`};
   box.innerHTML=`<div class="field"><span class="label">Cada status do Mega leva para qual etapa?</span>
     <div class="maprow">${vals.map((v,i)=>`<label for="st_${i}">${esc(v)}</label><select id="st_${i}" data-st="${esc(v)}">${stOpts(v)}</select>`).join('')}</div>
     <span class="note">Fica salvo para as próximas importações. Um aditivo só avança: se no painel ele já estiver numa etapa mais à frente, a etapa é mantida.</span></div>`;
@@ -950,10 +955,10 @@ function buildPlan(){
     if(!d){
       if(!imp.createNew||st==='__arq'){plan.push({type:'none',id,g});continue}
       const rep=st==='__rep';
-      const etapa=rep?'rm':STAGES[IDX[st]]?st:coK?'cotacao':rmK?'aprov_controle':'necessidade';
+      const etapa=rep?'correcao_rm':STAGES[IDX[st]]?st:coK?'cotacao':rmK?'aprov_controle':'necessidade';
       const doc={titulo:g.raw.titulo||id,obra:g.raw.obra||'',empreiteiro:g.raw.empreiteiro||'',contrato:g.raw.contrato||'',valor:g.valor,etapa,
         insumoExiste:null,alocacaoSolicitada:null,alocacaoOk:null,estouro:null,rm:g.raw.rm||'',cotacao:g.raw.cotacao||'',notas:'',
-        ...(rep?{motivoTipo:'reprova',motivo:g.raw.motivo||'',motivoData:today(),reprovaResolvida:false}:{}),
+        ...(rep?{teveReprova:true,reprovas:1,motivoTipo:'reprova',motivo:g.raw.motivo||'',motivoData:today(),reprovaResolvida:false}:{}),
         entradas:{[etapa]:today()},criado:today(),arquivado:false,atualizado:new Date().toISOString(),
         log:[{t:today(),msg:'Cadastrado pela planilha do Mega ('+imp.file+') na etapa '+STAGES[IDX[etapa]].n+(rep?' (reprovado pelo Controle'+(g.raw.motivo?': '+g.raw.motivo:'')+')':'')}]};
       plan.push({type:'new',id,g,doc,ch:[{k:'etapa',to:etapa},...(rep?[{k:'reprova',to:true}]:[]),...(rep&&g.raw.motivo?[{k:'motivo',to:g.raw.motivo}]:[]),...(g.valor!=null?[{k:'valor',to:g.valor}]:[])]});continue;
@@ -968,13 +973,13 @@ function buildPlan(){
       if(!d.arquivado){put('arquivado',true);Object.assign(patch,{motivoTipo:'cancelamento',motivoData:today()});if(mot)put('motivo',mot)}
       else if(isCancel(d)&&mot&&mot!==d.motivo)put('motivo',mot);
     }else if(st==='__rep'){
-      // Reprova nova (ou com outro motivo) e o aditivo ainda não passou da aprovação: volta para Subir RM
+      // Reprova nova (ou com outro motivo) e o aditivo ainda não passou da aprovação: vai para Correção da RM
       const nova=d.motivoTipo!=='reprova'||(mot&&mot!==d.motivo);
       if(!d.arquivado&&nova&&IDX[d.etapa]>=IDX.rm&&IDX[d.etapa]<=IDX.aprov_gestao){
         ch.push({k:'reprova',from:false,to:true});
-        Object.assign(patch,{motivoTipo:'reprova',motivoData:today(),reprovaResolvida:false});
+        Object.assign(patch,{motivoTipo:'reprova',motivoData:today(),reprovaResolvida:false,teveReprova:true,reprovas:(d.reprovas||0)+1});
         if(mot)put('motivo',mot);
-        if(d.etapa!=='rm'){put('etapa','rm');patch.entradas={rm:today()}}
+        if(d.etapa!=='correcao_rm'){put('etapa','correcao_rm');patch.entradas={correcao_rm:today()}}
       }else if(repAberta(d)&&mot&&!d.motivo)put('motivo',mot);
     }else if(st&&!d.arquivado&&IDX[st]>IDX[d.etapa]){put('etapa',st);patch.entradas={[st]:today()};Object.assign(patch,resolveRep(d,st))}
     plan.push({type:ch.length?'upd':'same',id,g,d,patch,ch});
