@@ -406,8 +406,8 @@ function render(){
   $('#activeStage').innerHTML=stageFilter?`<span class="activefilter">Etapa: ${esc(STAGES[IDX[stageFilter]].n)}<button type="button" data-clearstage aria-label="Limpar filtro de etapa">×</button></span>`:'';
 
   const obras=[...new Set(rows.map(d=>d.obra).filter(Boolean))].sort();
-  const sel=$('#fObra'), cur=sel.value;
-  sel.innerHTML='<option value="">Todas as obras</option>'+obras.map(o=>`<option ${o===cur?'selected':''}>${esc(o)}</option>`).join('');
+  const obraSel=$('#fObra'), cur=obraSel.value;
+  obraSel.innerHTML='<option value="">Todas as obras</option>'+obras.map(o=>`<option ${o===cur?'selected':''}>${esc(o)}</option>`).join('');
   $('#obrasList').innerHTML=obras.map(o=>`<option value="${esc(o)}">`).join('');
 
   const list=$('#list');
