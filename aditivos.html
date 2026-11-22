@@ -141,6 +141,23 @@ legend{padding:0 6px;font-size:.78rem;text-transform:uppercase;letter-spacing:.0
 .addnote{display:flex;gap:8px}
 .addnote input{flex:1;min-width:0}
 .slagrid{display:grid;grid-template-columns:1fr 90px;gap:6px 12px;align-items:center}
+/* Seleção múltipla */
+.card{position:relative}
+@media (pointer:coarse){.card{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}}
+.card.selmode{cursor:pointer}
+.card.selmode .card-top{padding-left:32px}
+.card.selected{outline:2px solid var(--accent);outline-offset:-1px;background:var(--accent-soft)}
+.selbox{position:absolute;top:14px;left:14px;width:22px;height:22px;border-radius:5px;border:2px solid var(--muted);background:var(--surface);display:grid;place-items:center;color:var(--accent-ink);font-size:13px;font-weight:700;line-height:1}
+.card.selected .selbox{background:var(--accent);border-color:var(--accent)}
+.bulk{position:fixed;left:0;right:0;bottom:0;z-index:15;background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -6px 24px rgba(0,0,0,.14);padding-block:10px calc(10px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.bulk-in{max-width:1180px;margin:0 auto;display:grid;gap:8px}
+.bulk-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.bulk-row .spacer{flex:1}
+.bulk-count{font-weight:600;margin-right:4px}
+.bulk select{width:auto}
+.bulk-row input{flex:1 1 160px;width:auto;min-width:0}
+body.has-bulk .wrap{padding-bottom:200px}
+body.has-bulk .toast{bottom:calc(150px + env(safe-area-inset-bottom,0px))}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:.88rem;z-index:20}
 @media (prefers-reduced-motion:no-preference){.card{transition:border-color .2s}}
 </style>
@@ -167,12 +184,14 @@ legend{padding:0 6px;font-size:.78rem;text-transform:uppercase;letter-spacing:.0
     <select id="fObra" aria-label="Filtrar por obra"><option value="">Todas as obras</option></select>
     <label class="check"><input type="checkbox" id="fDone"> Mostrar liberados e arquivados</label>
     <span id="activeStage"></span>
+    <button type="button" id="btnSel">Selecionar</button>
   </div>
 
   <section id="list" class="list" aria-live="polite">
     <div class="empty" style="grid-column:1/-1"><strong>Carregando aditivos…</strong>Os dados ficam salvos na sua conta do claude.ai.</div>
   </section>
 
+  <p class="note">Dica: segure o dedo sobre um cartão (no computador, botão direito ou Ctrl+clique) para selecionar vários e agir em lote.</p>
   <p class="note">Status do prazo: <span class="chip ok">dentro</span> <span class="chip warn">no limite</span> <span class="chip late">atrasado</span>. Os prazos de cada etapa e o nome do setor que sobe o saldo no contrato ficam em Ajustes.</p>
 </div>
 
@@ -221,6 +240,29 @@ legend{padding:0 6px;font-size:.78rem;text-transform:uppercase;letter-spacing:.0
   </form>
 </dialog>
 <datalist id="obrasList"></datalist>
+
+<div class="bulk" id="bulk" hidden role="toolbar" aria-label="Ações nos selecionados">
+  <div class="bulk-in">
+    <div class="bulk-row">
+      <span class="bulk-count" id="bulkCount">0 selecionados</span>
+      <button type="button" id="bAll">Selecionar todos</button>
+      <button type="button" id="bNone">Limpar</button>
+      <span class="spacer"></span>
+      <button type="button" class="ghost" id="bExit">Sair da seleção</button>
+    </div>
+    <div class="bulk-row" id="bActions">
+      <button type="button" class="primary" id="bAdv">Concluir etapa</button>
+      <select id="bMove" aria-label="Mover selecionados para a etapa"><option value="">Mover para…</option></select>
+      <button type="button" id="bNote">Anotar</button>
+      <button type="button" id="bObra">Alterar obra / empreiteiro</button>
+      <button type="button" id="bArch">Arquivar</button>
+      <button type="button" id="bUnarch">Reativar</button>
+      <button type="button" id="bCsv">Exportar CSV</button>
+      <button type="button" class="danger" id="bDel">Excluir</button>
+    </div>
+    <div class="bulk-row" id="bPanel" hidden></div>
+  </div>
+</div>
 
 <dialog id="cfg">
   <form class="dlg" id="cfgFrm" method="dialog">
@@ -335,6 +377,7 @@ function filtered(){
 }
 
 function render(){
+  renderBulk();
   const active=rows.filter(d=>!d.arquivado&&d.etapa!=='liberado');
   const late=active.filter(d=>status(d).late);
   const waitOthers=active.filter(d=>['aprov_controle','aprov_gestao','aprov_suprimentos','assinatura'].includes(d.etapa)||(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk));
@@ -375,13 +418,15 @@ function render(){
     const acts=actions(d).map(a=>`<button type="button" class="${a.primary?'primary':''}" data-act="${a.id}" data-id="${esc(d.id)}" ${b?'disabled':''}>${esc(a.label)}</button>`).join('');
     const meta=[d.obra,d.empreiteiro,d.contrato?'<span class="mono">CT '+esc(d.contrato)+'</span>':''].filter(Boolean).map(x=>x.startsWith('<span')?x:esc(x)).join(' · ');
     const ids=[d.rm?'RM '+esc(d.rm):'',d.cotacao?'Cot. '+esc(d.cotacao):''].filter(Boolean).join(' · ');
-    return`<article class="card st-${s.cls}">
+    const on=sel.has(d.id);
+    return`<article class="card st-${s.cls}${selMode?' selmode':''}${on?' selected':''}" data-card="${esc(d.id)}"${selMode?` aria-selected="${on}"`:''}>
+      ${selMode?`<span class="selbox" aria-hidden="true">${on?'✓':''}</span>`:''}
       <div class="card-top"><div><h3>${esc(d.titulo||'(sem descrição)')}</h3><p class="meta">${meta||'—'}</p></div>${d.valor!=null?`<div class="val">${esc(brl(d.valor))}</div>`:''}</div>
       <ol class="steps" aria-label="Etapa ${i+1} de 12">${steps}</ol>
       <div class="stage-row"><span class="stage-name"><span class="num">${pad(i+1)}/12</span>${esc(STAGES[i].n)}</span><span class="chip ${s.chip}">${esc(s.label)}</span></div>
       <p class="next">${esc(nextText(d))}</p>
       ${d.estouro==='sim'&&i<=IDX.aprov_gestao?'<p class="sub">Com estouro de insumo: precisa de coord. + gerente.</p>':''}
-      <div class="card-actions">${acts}<span class="spacer"></span>${ids?`<span class="mono muted" style="font-size:.78rem">${ids}</span>`:''}<button type="button" class="ghost" data-open="${esc(d.id)}">Detalhes</button></div>
+      <div class="card-actions"${selMode?' hidden':''}>${acts}<span class="spacer"></span>${ids?`<span class="mono muted" style="font-size:.78rem">${ids}</span>`:''}<button type="button" class="ghost" data-open="${esc(d.id)}">Detalhes</button></div>
     </article>`}).join('');
 }
 
@@ -464,7 +509,7 @@ $('#cfgFrm').addEventListener('submit',async e=>{
 });
 
 /* CSV */
-async function exportCsv(){
+async function exportCsv(rows){
   const head=['Descrição','Obra','Empreiteiro','Contrato','Valor','Etapa nº','Etapa','Entrou na etapa','Dias úteis na etapa','Prazo','Situação','Insumo existe','Estouro','RM','Cotação','Cadastrado','Arquivado','Observações'];
   const lines=rows.map(d=>{const s=status(d),i=IDX[d.etapa];return[d.titulo,d.obra,d.empreiteiro,d.contrato,d.valor!=null?String(d.valor).replace('.',','):'',i+1,STAGES[i].n,fmtD(d.entradas?.[d.etapa]),s.n??'',slaOf(d.etapa),s.late?'Atrasado':s.cls==='warn'?'No limite':s.cls==='done'?'Concluído':'No prazo',d.insumoExiste||'',d.estouro||'',d.rm,d.cotacao,fmtD(d.criado),d.arquivado?'sim':'',d.notas]});
   const csv='﻿'+[head,...lines].map(r=>r.map(c=>{c=String(c??'');return/[;"\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c}).join(';')).join('\r\n');
@@ -475,6 +520,10 @@ async function exportCsv(){
 
 /* Eventos */
 document.addEventListener('click',e=>{
+  if(suppressClick){suppressClick=false;if(e.target.closest('#list')){e.preventDefault();return}}
+  const card=e.target.closest('#list .card');
+  if(card&&selMode){toggleSel(card.dataset.card);return}
+  if(card&&(e.ctrlKey||e.metaKey)&&!e.target.closest('button')){enterSel(card.dataset.card);return}
   const t=e.target.closest('button');if(!t)return;
   if(t.dataset.stage){stageFilter=stageFilter===t.dataset.stage?null:t.dataset.stage;render();return}
   if('clearstage' in t.dataset){stageFilter=null;render();return}
@@ -484,7 +533,103 @@ document.addEventListener('click',e=>{
 });
 $('#btnNew').onclick=()=>openDlg(null);
 $('#btnCfg').onclick=openCfg;
-$('#btnCsv').onclick=exportCsv;
+$('#btnCsv').onclick=()=>exportCsv(rows);
+
+/* Seleção múltipla */
+let selMode=false, suppressClick=false, lp=null;
+const sel=new Set();
+const selRows=()=>rows.filter(r=>sel.has(r.id));
+function enterSel(id){selMode=true;if(id)sel.add(id);render()}
+function exitSel(){selMode=false;sel.clear();closePanel();resetBulkDel();render()}
+function toggleSel(id){sel.has(id)?sel.delete(id):sel.add(id);resetBulkDel();render()}
+$('#bMove').innerHTML+=STAGES.map((s,i)=>`<option value="${s.k}">${pad(i+1)} · ${esc(s.n)}</option>`).join('');
+function renderBulk(){
+  $('#bulk').hidden=!selMode;
+  document.body.classList.toggle('has-bulk',selMode);
+  $('#btnSel').textContent=selMode?'Cancelar seleção':'Selecionar';
+  if(!selMode)return;
+  const list=selRows(), n=list.length;
+  $('#bulkCount').textContent=n===1?'1 selecionado':n+' selecionados';
+  $('#bActions').querySelectorAll('button,select').forEach(b=>b.disabled=!n);
+  $('#bUnarch').hidden=!list.some(d=>d.arquivado);
+  $('#bArch').hidden=n>0&&list.every(d=>d.arquivado);
+}
+const list$=$('#list');
+list$.addEventListener('pointerdown',e=>{
+  suppressClick=false;
+  const c=e.target.closest('.card');if(!c||e.button>0)return;
+  if(e.target.closest('button,a,input,select')&&!selMode)return;
+  const id=c.dataset.card;
+  lp={x:e.clientX,y:e.clientY,t:setTimeout(()=>{suppressClick=true;lp=null;try{navigator.vibrate&&navigator.vibrate(25)}catch(_){}
+    if(!selMode)enterSel(id);else toggleSel(id)},500)};
+});
+const cancelLp=()=>{if(lp){clearTimeout(lp.t);lp=null}};
+list$.addEventListener('pointermove',e=>{if(lp&&Math.hypot(e.clientX-lp.x,e.clientY-lp.y)>10)cancelLp()});
+['pointerup','pointercancel','pointerleave'].forEach(ev=>list$.addEventListener(ev,cancelLp));
+list$.addEventListener('contextmenu',e=>{
+  const c=e.target.closest('.card');if(!c)return;
+  e.preventDefault();
+  if(e.pointerType==='touch'||suppressClick)return;
+  if(!selMode)enterSel(c.dataset.card);else toggleSel(c.dataset.card);
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&selMode&&!document.querySelector('dialog[open]'))exitSel()});
+$('#btnSel').onclick=()=>selMode?exitSel():enterSel();
+$('#bExit').onclick=exitSel;
+$('#bAll').onclick=()=>{filtered().forEach(x=>sel.add(x.d.id));render()};
+$('#bNone').onclick=()=>{sel.clear();resetBulkDel();render()};
+
+const upd=(d,p)=>db.doc('aditivos/'+d.id).update({...p,atualizado:new Date().toISOString()});
+async function bulk(list,fn,okMsg){
+  if(!db){toast('Sem conexão com o armazenamento.');return 0}
+  if(!list.length)return 0;
+  list.forEach(d=>busy.add(d.id));render();
+  const r=await Promise.allSettled(list.map(fn));
+  list.forEach(d=>busy.delete(d.id));
+  const fail=r.filter(x=>x.status==='rejected').length;
+  toast(fail?`${list.length-fail} atualizados, ${fail} falharam. Tente de novo.`:okMsg);
+  render();return fail;
+}
+$('#bAdv').onclick=async()=>{
+  const all=selRows(), can=all.filter(d=>!d.arquivado&&actions(d)[0].id==='adv'), skip=all.length-can.length;
+  if(!can.length){toast('Nenhum dos selecionados pode avançar direto: precisam de decisão (insumo / Controle) ou já estão no fim.');return}
+  await bulk(can,d=>{const to=nextKey(d);return upd(d,{etapa:to,entradas:{[to]:today()},log:logPlus(d,'Etapa: '+STAGES[IDX[to]].n+' (em lote)')})},
+    can.length+' avançados'+(skip?`; ${skip} ficaram (precisam de decisão no cartão)`:''));
+};
+$('#bMove').onchange=async e=>{
+  const to=e.target.value;e.target.value='';if(!to)return;
+  const list=selRows().filter(d=>d.etapa!==to);
+  if(!list.length){toast('Todos já estão nessa etapa.');return}
+  await bulk(list,d=>upd(d,{etapa:to,entradas:{[to]:today()},log:logPlus(d,'Movido para '+STAGES[IDX[to]].n+' (em lote)')}),list.length+' movidos para '+STAGES[IDX[to]].n);
+};
+$('#bArch').onclick=()=>{const l=selRows().filter(d=>!d.arquivado);bulk(l,d=>upd(d,{arquivado:true,log:logPlus(d,'Arquivado (em lote)')}),l.length+' arquivados')};
+$('#bUnarch').onclick=()=>{const l=selRows().filter(d=>d.arquivado);bulk(l,d=>upd(d,{arquivado:false,log:logPlus(d,'Reativado (em lote)')}),l.length+' reativados')};
+$('#bCsv').onclick=()=>exportCsv(selRows());
+function closePanel(){$('#bPanel').hidden=true;$('#bPanel').innerHTML=''}
+function openPanel(html,apply){
+  const p=$('#bPanel');p.innerHTML=html+'<button type="button" class="primary" data-apply>Aplicar</button><button type="button" class="ghost" data-cancelpanel>Cancelar</button>';p.hidden=false;
+  p.querySelector('input')?.focus();
+  p.querySelector('[data-apply]').onclick=async()=>{await apply(p);closePanel()};
+  p.querySelector('[data-cancelpanel]').onclick=closePanel;
+  p.querySelectorAll('input').forEach(i=>i.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();p.querySelector('[data-apply]').click()}}));
+}
+$('#bNote').onclick=()=>openPanel('<input id="bNoteIn" placeholder="Anotação para todos os selecionados" aria-label="Anotação">',async p=>{
+  const m=p.querySelector('#bNoteIn').value.trim();if(!m)return;
+  const l=selRows();await bulk(l,d=>upd(d,{log:logPlus(d,m)}),'Anotado em '+l.length);
+});
+$('#bObra').onclick=()=>openPanel('<input id="bObraIn" list="obrasList" placeholder="Obra (vazio = manter)" aria-label="Obra"><input id="bEmpIn" placeholder="Empreiteiro (vazio = manter)" aria-label="Empreiteiro">',async p=>{
+  const o=p.querySelector('#bObraIn').value.trim(), em=p.querySelector('#bEmpIn').value.trim();if(!o&&!em)return;
+  const patch={};if(o)patch.obra=o;if(em)patch.empreiteiro=em;
+  const l=selRows();await bulk(l,d=>upd(d,patch),l.length+' atualizados');
+});
+let bDelTimer=null;
+function resetBulkDel(){clearTimeout(bDelTimer);const b=$('#bDel');b.textContent='Excluir';b.dataset.armed=''}
+$('#bDel').onclick=async()=>{
+  const b=$('#bDel'), l=selRows();if(!l.length)return;
+  if(!b.dataset.armed){b.dataset.armed='1';b.textContent=`Confirmar exclusão de ${l.length}`;bDelTimer=setTimeout(resetBulkDel,4000);return}
+  resetBulkDel();
+  const fail=await bulk(l,d=>db.doc('aditivos/'+d.id).delete(),l.length===1?'1 aditivo excluído':l.length+' aditivos excluídos');
+  if(!fail)exitSel();
+};
 ['#q','#fObra','#fDone'].forEach(s=>$(s).addEventListener('input',render));
 
 let toastT;
@@ -502,6 +647,7 @@ render();
     rows=s.docs.map(x=>({id:x.id,...x.data()})).filter(d=>IDX[d.etapa]!=null);
     if(!s.metadata.fromCache){clearTimeout(timer)}
     loaded=true;
+    [...sel].forEach(id=>{if(!rows.some(r=>r.id===id))sel.delete(id)});
     if(editing){const fresh=rows.find(r=>r.id===editing.id);if(fresh){editing=fresh;if($('#dlg').open)renderLog(fresh)}}
     render();
   },e=>{clearTimeout(timer);loaded=true;render();toast('Conexão com os dados perdida. Recarregue a página.')});
