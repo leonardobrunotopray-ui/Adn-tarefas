@@ -105,6 +105,12 @@ textarea{resize:vertical;min-height:70px}
 .chip.warn{background:var(--warn-soft);color:var(--warn)}
 .chip.late{background:var(--bad-soft);color:var(--bad)}
 .chip.neutral{background:var(--surface-2);color:var(--muted)}
+.chip.block{background:var(--warn-soft);color:var(--warn);box-shadow:inset 0 0 0 1px var(--warn);font-family:var(--f-body);font-weight:500;white-space:normal;overflow-wrap:anywhere}
+.blocks{display:flex;flex-wrap:wrap;gap:6px}
+.blk-edit{display:grid;gap:8px}
+.blk-edit .blocks .chip{display:inline-flex;align-items:center;gap:4px;padding-right:3px}
+.blk-edit .blocks button{border:0;background:transparent;color:inherit;padding:0 6px;font-size:1rem;line-height:1}
+.summary .warn b{color:var(--warn)}
 .next{margin:0;font-size:.88rem}
 .sub{margin:0;font-size:.82rem;color:var(--warn)}
 .sub.bad{color:var(--bad);overflow-wrap:anywhere}
@@ -217,6 +223,7 @@ details.imp ul{margin:8px 0 0;padding-left:18px;font-size:.85rem;color:var(--mut
   <div class="filters">
     <input type="search" id="q" placeholder="Buscar por título, obra, empreiteiro, contrato, RM…" aria-label="Buscar">
     <select id="fObra" aria-label="Filtrar por obra"><option value="">Todas as obras</option></select>
+    <label class="check"><input type="checkbox" id="fBlock"> Só com entrave</label>
     <label class="check"><input type="checkbox" id="fDone"> Mostrar liberados e arquivados</label>
     <span id="activeStage"></span>
     <button type="button" id="btnSel">Selecionar</button>
@@ -236,6 +243,10 @@ details.imp ul{margin:8px 0 0;padding-left:18px;font-size:.85rem;color:var(--mut
     <div class="dlg-body">
       <div class="grid">
         <label class="field wide"><span class="label">Descrição do aditivo</span><input id="f_titulo" required placeholder="Ex.: Acréscimo de alvenaria bloco 2"></label>
+        <div class="field wide blk-edit"><span class="label">Entraves (o que está travando)</span>
+          <div class="blocks" id="blkList"></div>
+          <div class="addnote"><input id="blkIn" list="blkPresets" placeholder="Ex.: Aguardando validação" aria-label="Novo entrave"><button type="button" id="blkAdd">Adicionar entrave</button></div>
+        </div>
         <label class="field"><span class="label">Obra</span><input id="f_obra" list="obrasList"></label>
         <label class="field"><span class="label">Empreiteiro</span><input id="f_empreiteiro"></label>
         <label class="field"><span class="label">Nº do contrato</span><input id="f_contrato" class="mono"></label>
@@ -282,6 +293,7 @@ details.imp ul{margin:8px 0 0;padding-left:18px;font-size:.85rem;color:var(--mut
   </form>
 </dialog>
 <datalist id="obrasList"></datalist>
+<datalist id="blkPresets"></datalist>
 
 <div class="bulk" id="bulk" hidden role="toolbar" aria-label="Ações nos selecionados">
   <div class="bulk-in">
@@ -299,6 +311,7 @@ details.imp ul{margin:8px 0 0;padding-left:18px;font-size:.85rem;color:var(--mut
       <button type="button" id="bObra">Alterar obra / empreiteiro</button>
       <button type="button" id="bArch">Arquivar</button>
       <button type="button" id="bUnarch">Reativar</button>
+      <button type="button" id="bBlk">Entrave</button>
       <button type="button" id="bCsv">Exportar CSV</button>
       <button type="button" class="danger" id="bDel">Excluir</button>
     </div>
@@ -488,9 +501,10 @@ function filtered(){
     if(stageFilter){if(d.etapa!==stageFilter||d.arquivado)return false}
     else if(!all&&(d.arquivado||d.etapa==='liberado'))return false;
     if(ob&&d.obra!==ob)return false;
-    if(q){const h=[d.titulo,d.obra,d.empreiteiro,d.contrato,d.rm,d.cotacao,d.notas,d.motivo].join(' ').toLowerCase();if(!h.includes(q))return false}
+    if($('#fBlock').checked&&!blk(d).length)return false;
+    if(q){const h=[d.titulo,d.obra,d.empreiteiro,d.contrato,d.rm,d.cotacao,d.notas,d.motivo,...blk(d)].join(' ').toLowerCase();if(!h.includes(q))return false}
     return true;
-  }).map(d=>({d,s:status(d)})).sort((a,b)=>(b.s.late?1:0)-(a.s.late?1:0)||(b.d.prioridade==='urgente'?1:0)-(a.d.prioridade==='urgente'?1:0)||(a.d.arquivado?1:0)-(b.d.arquivado?1:0)||IDX[b.d.etapa]-IDX[a.d.etapa]||(b.s.n||0)-(a.s.n||0));
+  }).map(d=>({d,s:status(d)})).sort((a,b)=>(b.s.late?1:0)-(a.s.late?1:0)||(b.d.prioridade==='urgente'?1:0)-(a.d.prioridade==='urgente'?1:0)||(blk(b.d).length?1:0)-(blk(a.d).length?1:0)||(a.d.arquivado?1:0)-(b.d.arquivado?1:0)||IDX[b.d.etapa]-IDX[a.d.etapa]||(b.s.n||0)-(a.s.n||0));
 }
 
 function render(){
@@ -505,6 +519,7 @@ function render(){
     <div class="${late.length?'bad':''}"><b>${late.length}</b><span class="muted">fora do prazo</span></div>
     <div><b>${waitOthers.length}</b><span class="muted">aguardando outros setores</span></div>
     <div><b>${active.length-waitOthers.length}</b><span class="muted">com ação sua</span></div>
+    <div class="${active.some(d=>blk(d).length)?'warn':''}"><b>${active.filter(d=>blk(d).length).length}</b><span class="muted">com entrave</span></div>
     <div><b>${liberadosMes}</b><span class="muted">liberados este mês</span></div>
     ${total?`<div><b>${esc(brl(total))}</b><span class="muted">em aditivos abertos</span></div>`:''}`:'';
 
@@ -539,6 +554,7 @@ function render(){
     return`<article class="card st-${s.cls}${selMode?' selmode':''}${on?' selected':''}" data-card="${esc(d.id)}"${selMode?` aria-selected="${on}"`:''}>
       ${selMode?`<span class="selbox" aria-hidden="true">${on?'✓':''}</span>`:''}
       <div class="card-top"><div><h3>${esc(d.titulo||'(sem descrição)')}</h3><p class="meta">${meta||'—'}</p></div>${d.valor!=null?`<div class="val">${esc(brl(d.valor))}</div>`:''}</div>
+      ${blk(d).length&&!d.arquivado?`<div class="blocks">${blk(d).map(b=>`<span class="chip block">Entrave: ${esc(b)}</span>`).join('')}</div>`:''}
       <ol class="steps" aria-label="Etapa ${i+1} de 12">${steps}</ol>
       <div class="stage-row"><span class="stage-name"><span class="num">${pad(i+1)}/12</span>${esc(STAGES[i].n)}</span><span class="chip ${s.chip}">${esc(s.label)}</span></div>
       ${tagsFor(d)}
@@ -556,6 +572,7 @@ function openDlg(d){
   editing=d||null;
   $('#dlgTitle').textContent=d?'Detalhes do aditivo':'Novo aditivo';
   const v=(id,val)=>{$(id).value=val??''};
+  dlgBlk=[...blk(d||{})];renderBlk();
   v('#f_titulo',d?.titulo);v('#f_obra',d?.obra);v('#f_empreiteiro',d?.empreiteiro);v('#f_contrato',d?.contrato);
   v('#f_valor',d?.valor!=null?d.valor.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');
   v('#f_etapa',d?.etapa||'necessidade');v('#f_entrada',d?(d.entradas?.[d.etapa]||''):today());
@@ -573,6 +590,23 @@ function openDlg(d){
   }
   $('#dlg').showModal();
 }
+const BLK_PRESETS=['Aguardando validação','Pendência de documento da empresa','Aguardando resposta do empreiteiro','Em análise','Divergência de quantitativo','Aguardando retorno do Controle','Falta de insumo na etapa'];
+const blk=d=>Array.isArray(d.entraves)?d.entraves.filter(Boolean):[];
+let dlgBlk=[];
+function blkOptions(){const all=[...new Set([...BLK_PRESETS,...rows.flatMap(blk)])];$('#blkPresets').innerHTML=all.map(x=>`<option value="${esc(x)}">`).join('')}
+function renderBlk(){
+  $('#blkList').innerHTML=dlgBlk.length?dlgBlk.map((b,i)=>`<span class="chip block">${esc(b)}<button type="button" data-blkdel="${i}" aria-label="Remover entrave ${esc(b)}">×</button></span>`).join(''):'<span class="muted" style="font-size:.85rem">Nenhum entrave.</span>';
+  blkOptions();
+}
+async function saveBlk(msg){
+  renderBlk();
+  if(!editing)return;
+  const log=logPlus(editing,msg);editing={...editing,entraves:[...dlgBlk],log};renderLog(editing);
+  try{await db.doc('aditivos/'+editing.id).update({entraves:[...dlgBlk],log,atualizado:new Date().toISOString()})}catch(e){toast('Não foi possível salvar o entrave.')}
+}
+$('#blkAdd').addEventListener('click',()=>{const v=$('#blkIn').value.trim();if(!v)return;$('#blkIn').value='';if(dlgBlk.some(x=>x.toLowerCase()===v.toLowerCase()))return;dlgBlk.push(v);saveBlk('Entrave: '+v)});
+$('#blkIn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#blkAdd').click()}});
+$('#blkList').addEventListener('click',e=>{const b=e.target.closest('[data-blkdel]');if(!b)return;const [x]=dlgBlk.splice(+b.dataset.blkdel,1);saveBlk('Entrave resolvido: '+x)});
 function renderLog(d){$('#log').innerHTML=[...(d.log||[])].reverse().map(l=>`<li><time>${fmtD(l.t)}</time><span>${esc(l.msg)}</span></li>`).join('')||'<li class="muted">Sem registros.</li>'}
 
 $('#frm').addEventListener('submit',async e=>{
@@ -580,7 +614,7 @@ $('#frm').addEventListener('submit',async e=>{
   if(!db){toast('Sem conexão com o armazenamento.');return}
   const g=id=>$(id).value.trim();
   const etapa=g('#f_etapa'), entrada=g('#f_entrada')||today();
-  const base={titulo:g('#f_titulo'),obra:g('#f_obra'),empreiteiro:g('#f_empreiteiro'),contrato:g('#f_contrato'),valor:parseMoney(g('#f_valor')),
+  const base={entraves:[...dlgBlk],titulo:g('#f_titulo'),obra:g('#f_obra'),empreiteiro:g('#f_empreiteiro'),contrato:g('#f_contrato'),valor:parseMoney(g('#f_valor')),
     etapa,insumoExiste:g('#f_insumo')||null,alocacaoSolicitada:g('#f_alocPed')||null,alocacaoOk:g('#f_alocOk')||null,estouro:g('#f_estouro')||null,
     rm:g('#f_rm'),cotacao:g('#f_cot'),notas:$('#f_notas').value,motivo:$('#f_motivo').value.trim(),prazo:g('#f_prazo')||null,prioridade:g('#f_prio')||null,atualizado:new Date().toISOString()};
   const btn=$('#btnSave');btn.disabled=true;
@@ -632,8 +666,8 @@ $('#cfgFrm').addEventListener('submit',async e=>{
 
 /* CSV */
 async function exportCsv(rows){
-  const head=['Descrição','Obra','Empreiteiro','Contrato','Valor','Etapa nº','Etapa','Entrou na etapa','Dias úteis na etapa','Prazo','Situação','Insumo existe','Estouro','RM','Cotação','Prazo final','Prioridade','Cadastrado','Arquivado','Reprova / cancelamento','Motivo','Observações'];
-  const lines=rows.map(d=>{const s=status(d),i=IDX[d.etapa];return[d.titulo,d.obra,d.empreiteiro,d.contrato,d.valor!=null?String(d.valor).replace('.',','):'',i+1,STAGES[i].n,fmtD(d.entradas?.[d.etapa]),s.n??'',slaOf(d.etapa),s.late?'Atrasado':s.cls==='warn'?'No limite':s.cls==='done'?'Concluído':'No prazo',d.insumoExiste||'',d.estouro||'',d.rm,d.cotacao,d.prazo?fmtD(d.prazo):'',d.prioridade==='urgente'?'Urgente':'',fmtD(d.criado),d.arquivado?'sim':'',d.motivoTipo==='reprova'?'Reprovado pelo Controle '+fmtD(d.motivoData):d.motivoTipo==='cancelamento'?'Cancelado '+fmtD(d.motivoData):'',d.motivo||'',d.notas]});
+  const head=['Descrição','Obra','Empreiteiro','Contrato','Valor','Etapa nº','Etapa','Entrou na etapa','Dias úteis na etapa','Prazo','Situação','Insumo existe','Estouro','RM','Cotação','Prazo final','Prioridade','Cadastrado','Arquivado','Reprova / cancelamento','Motivo','Entraves','Observações'];
+  const lines=rows.map(d=>{const s=status(d),i=IDX[d.etapa];return[d.titulo,d.obra,d.empreiteiro,d.contrato,d.valor!=null?String(d.valor).replace('.',','):'',i+1,STAGES[i].n,fmtD(d.entradas?.[d.etapa]),s.n??'',slaOf(d.etapa),s.late?'Atrasado':s.cls==='warn'?'No limite':s.cls==='done'?'Concluído':'No prazo',d.insumoExiste||'',d.estouro||'',d.rm,d.cotacao,d.prazo?fmtD(d.prazo):'',d.prioridade==='urgente'?'Urgente':'',fmtD(d.criado),d.arquivado?'sim':'',d.motivoTipo==='reprova'?'Reprovado pelo Controle '+fmtD(d.motivoData):d.motivoTipo==='cancelamento'?'Cancelado '+fmtD(d.motivoData):'',d.motivo||'',blk(d).join(' | '),d.notas]});
   const csv='﻿'+[head,...lines].map(r=>r.map(c=>{c=String(c??'');return/[;"\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c}).join(';')).join('\r\n');
   try{const dl=await claude.use('downloads');if(!dl){toast('Exportação indisponível nesta visualização.');return}
     await dl.save({filename:'aditivos-'+today()+'.csv',data:new Blob([csv],{type:'text/csv;charset=utf-8'})})}
@@ -726,6 +760,13 @@ $('#bMove').onchange=async e=>{
 $('#bArch').onclick=()=>{const l=selRows().filter(d=>!d.arquivado);bulk(l,d=>upd(d,{arquivado:true,log:logPlus(d,'Arquivado (em lote)')}),l.length+' arquivados')};
 $('#bUnarch').onclick=()=>{const l=selRows().filter(d=>d.arquivado);bulk(l,d=>upd(d,{arquivado:false,log:logPlus(d,'Reativado (em lote)')}),l.length+' reativados')};
 $('#bCsv').onclick=()=>exportCsv(selRows());
+$('#bBlk').onclick=()=>{blkOptions();openPanel('<input id="bBlkIn" list="blkPresets" placeholder="Entrave para os selecionados (ex.: Aguardando validação)" aria-label="Entrave"><label class="check"><input type="checkbox" id="bBlkRm"> remover em vez de adicionar</label>',async p=>{
+  const v=p.querySelector('#bBlkIn').value.trim(), rm=p.querySelector('#bBlkRm').checked;if(!v)return;
+  const lv=v.toLowerCase();
+  const l=selRows().filter(d=>rm?blk(d).some(x=>x.toLowerCase()===lv):!blk(d).some(x=>x.toLowerCase()===lv));
+  if(!l.length){toast(rm?'Nenhum selecionado tem esse entrave.':'Todos já têm esse entrave.');return}
+  await bulk(l,d=>upd(d,{entraves:rm?blk(d).filter(x=>x.toLowerCase()!==lv):[...blk(d),v],log:logPlus(d,(rm?'Entrave resolvido: ':'Entrave: ')+v+' (em lote)')}),(rm?'Entrave removido de ':'Entrave adicionado em ')+l.length);
+})};
 function closePanel(){$('#bPanel').hidden=true;$('#bPanel').innerHTML=''}
 function openPanel(html,apply){
   const p=$('#bPanel');p.innerHTML=html+'<button type="button" class="primary" data-apply>Aplicar</button><button type="button" class="ghost" data-cancelpanel>Cancelar</button>';p.hidden=false;
@@ -752,7 +793,7 @@ $('#bDel').onclick=async()=>{
   const fail=await bulk(l,d=>db.doc('aditivos/'+d.id).delete(),l.length===1?'1 aditivo excluído':l.length+' aditivos excluídos');
   if(!fail)exitSel();
 };
-['#q','#fObra','#fDone'].forEach(s=>$(s).addEventListener('input',render));
+['#q','#fObra','#fDone','#fBlock'].forEach(s=>$(s).addEventListener('input',render));
 
 let toastT;
 function toast(m){let el=$('.toast');if(!el){el=document.createElement('div');el.className='toast';el.setAttribute('role','status');document.body.appendChild(el)}el.textContent=m;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>el.hidden=true,2600)}
@@ -993,7 +1034,7 @@ render();
     else if(!rows.length)return;
     loaded=true;
     [...sel].forEach(id=>{if(!rows.some(r=>r.id===id))sel.delete(id)});
-    if(editing){const fresh=rows.find(r=>r.id===editing.id);if(fresh){editing=fresh;if($('#dlg').open){renderLog(fresh);renderCk(fresh)}}}
+    if(editing){const fresh=rows.find(r=>r.id===editing.id);if(fresh){editing=fresh;if($('#dlg').open){renderLog(fresh);renderCk(fresh);dlgBlk=[...blk(fresh)];renderBlk()}}}
     render();
   },e=>{clearTimeout(timer);loaded=true;setSync('slow','Conexão perdida: recarregue a página');render()});
 })();
