@@ -107,6 +107,7 @@ textarea{resize:vertical;min-height:70px}
 .chip.neutral{background:var(--surface-2);color:var(--muted)}
 .next{margin:0;font-size:.88rem}
 .sub{margin:0;font-size:.82rem;color:var(--warn)}
+.sub.bad{color:var(--bad);overflow-wrap:anywhere}
 .card-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .card-actions .spacer{flex:1}
 
@@ -248,6 +249,7 @@ details.imp ul{margin:8px 0 0;padding-left:18px;font-size:.85rem;color:var(--mut
           <label class="field"><span class="label">Houve estouro do insumo?</span><select id="f_estouro"><option value="">Ainda não sei</option><option value="nao">Não</option><option value="sim">Sim (coord. + gerente aprovam)</option></select></label>
           <label class="field"><span class="label">Nº da RM (Mega)</span><input id="f_rm" class="mono"></label>
           <label class="field"><span class="label">Nº da cotação (Mega)</span><input id="f_cot" class="mono"></label>
+          <label class="field wide"><span class="label" id="f_motivoLbl">Motivo (reprova do Controle / cancelamento)</span><textarea id="f_motivo" placeholder="Preenchido quando o Controle reprova a RM ou o aditivo é cancelado"></textarea></label>
           <label class="field wide"><span class="label">Observações</span><textarea id="f_notas"></textarea></label>
         </div>
       </fieldset>
@@ -264,6 +266,7 @@ details.imp ul{margin:8px 0 0;padding-left:18px;font-size:.85rem;color:var(--mut
     <div class="dlg-foot">
       <button type="button" class="danger" id="btnDel" hidden>Excluir</button>
       <button type="button" id="btnArch" hidden>Arquivar</button>
+      <button type="button" class="danger" id="btnCancel" hidden>Cancelar aditivo</button>
       <span class="spacer"></span>
       <button type="button" data-close>Cancelar</button>
       <button type="submit" class="primary" id="btnSave">Salvar</button>
@@ -303,6 +306,17 @@ details.imp ul{margin:8px 0 0;padding-left:18px;font-size:.85rem;color:var(--mut
       <div class="field"><span class="label">Prazo de cada etapa (dias úteis)</span><div class="slagrid" id="slaGrid"></div></div>
     </div>
     <div class="dlg-foot"><span class="spacer"></span><button type="button" data-close>Cancelar</button><button type="submit" class="primary">Salvar ajustes</button></div>
+  </form>
+</dialog>
+
+<dialog id="mot">
+  <form class="dlg" id="motFrm" method="dialog">
+    <div class="dlg-head"><h2 id="motTitle">Motivo</h2><button type="button" class="ghost" data-close>Fechar</button></div>
+    <div class="dlg-body">
+      <p class="muted" id="motSub" style="margin:0"></p>
+      <label class="field"><span class="label">Motivo</span><textarea id="motIn" required placeholder="Ex.: insumo errado na RM; quantidade acima do orçado"></textarea></label>
+    </div>
+    <div class="dlg-foot"><span class="spacer"></span><button type="button" data-close>Voltar</button><button type="submit" class="primary" id="motOk">Confirmar</button></div>
   </form>
 </dialog>
 
@@ -347,7 +361,7 @@ const txt=s=>s.replace(/\{setor\}/g,setor());
 const slaOf=k=>{const v=cfg.sla&&cfg.sla[k];return typeof v==='number'?v:STAGES[IDX[k]].sla};
 
 function status(d){
-  if(d.arquivado||d.etapa==='liberado')return{cls:'done',chip:'neutral',label:d.arquivado?'Arquivado':'Liberado '+fmtD(d.entradas?.liberado)};
+  if(d.arquivado||d.etapa==='liberado')return{cls:'done',chip:d.arquivado&&isCancel(d)?'late':'neutral',label:d.arquivado?(isCancel(d)?'Cancelado':'Arquivado'):'Liberado '+fmtD(d.entradas?.liberado)};
   let ref=d.entradas?.[d.etapa], sla=slaOf(d.etapa), what='';
   if(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk&&d.alocacaoSolicitada){ref=d.alocacaoSolicitada;sla=ALOC_SLA;what=' alocação'}
   const n=bdays(ref);
@@ -368,13 +382,18 @@ function actions(d){
     if(d.insumoExiste==='nao'&&!d.alocacaoOk)return[{id:'alocado',label:'Controle alocou → subir RM',primary:1}];
     if(!d.insumoExiste)return[{id:'insumo_sim',label:'Insumo existe → subir RM',primary:1},{id:'insumo_nao',label:'Não existe: e-mail enviado ao Controle'}];
   }
-  if(k==='aprov_controle')return[{id:'ctrl_ok',label:'Aprovado sem estouro →',primary:1},{id:'ctrl_estouro',label:'Aprovado com estouro →'}];
+  if(k==='aprov_controle')return[{id:'ctrl_ok',label:'Aprovado sem estouro →',primary:1},{id:'ctrl_estouro',label:'Aprovado com estouro →'},{id:'ctrl_rep',label:'Reprovado…'}];
   if(k==='liberado')return[{id:'arquivar',label:'Arquivar'}];
   const nk=nextKey(d);
   return[{id:'adv',label:'Concluir → '+STAGES[IDX[nk]].n,primary:1}];
 }
+const isCancel=d=>d.motivoTipo==='cancelamento';
+const repAberta=d=>d.motivoTipo==='reprova'&&!d.reprovaResolvida;
+// Ao sair da etapa "Subir RM" depois de uma reprova, a reprova conta como resolvida
+const resolveRep=(d,to)=>repAberta(d)&&to!=='rm'&&IDX[to]>IDX.rm?{reprovaResolvida:true}:{};
 function nextText(d){
-  if(d.arquivado)return'Arquivado.';
+  if(d.arquivado)return isCancel(d)?'Cancelado.':'Arquivado.';
+  if(d.etapa==='rm'&&repAberta(d))return'RM reprovada pelo Controle: corrigir e subir a RM de novo no Mega.';
   if(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk)return'Aguardando o Controle alocar o insumo na etapa do serviço (e-mail enviado em '+fmtD(d.alocacaoSolicitada)+').';
   return txt(STAGES[IDX[d.etapa]].a);
 }
@@ -388,8 +407,24 @@ async function write(id,patch){
 }
 function logPlus(d,msg){return[...(d.log||[]),{t:today(),msg}]}
 function move(d,to,extra={},msg){
-  const p={...extra,etapa:to,entradas:{[to]:today()},log:logPlus(d,msg||('Etapa: '+STAGES[IDX[to]].n))};
+  const p={...resolveRep(d,to),...extra,etapa:to,entradas:{[to]:today()},log:logPlus(d,msg||('Etapa: '+STAGES[IDX[to]].n))};
   return write(d.id,p);
+}
+let motResolve=null;
+function askMotivo(title,sub,okLabel,cur){
+  $('#motTitle').textContent=title;$('#motSub').textContent=sub;$('#motOk').textContent=okLabel;$('#motIn').value=cur||'';
+  $('#mot').showModal();$('#motIn').focus();
+  return new Promise(r=>{motResolve=r});
+}
+$('#motFrm').addEventListener('submit',e=>{e.preventDefault();const m=$('#motIn').value.trim();if(!m)return;const r=motResolve;motResolve=null;$('#mot').close();r&&r(m)});
+$('#mot').addEventListener('close',()=>{if(motResolve){motResolve(null);motResolve=null}});
+async function reprovar(d){
+  const m=await askMotivo('Reprovado pelo Controle',d.titulo||'','Registrar reprova');if(!m)return;
+  return move(d,'rm',{motivoTipo:'reprova',motivo:m,motivoData:today(),reprovaResolvida:false},'Reprovado pelo Controle: '+m+' → corrigir e subir a RM de novo');
+}
+async function cancelar(d){
+  const m=await askMotivo('Cancelar aditivo',d.titulo||'','Cancelar aditivo');if(!m)return;
+  return write(d.id,{arquivado:true,motivoTipo:'cancelamento',motivo:m,motivoData:today(),log:logPlus(d,'Cancelado: '+m)});
 }
 function doAction(id,d){
   switch(id){
@@ -400,7 +435,8 @@ function doAction(id,d){
     case'ctrl_ok':return move(d,'cotacao',{estouro:'nao'},'Controle aprovou, sem estouro → Cotação');
     case'ctrl_estouro':return move(d,'aprov_gestao',{estouro:'sim'},'Controle aprovou, com estouro → Aprov. Coord./Gerente');
     case'arquivar':return write(d.id,{arquivado:true,log:logPlus(d,'Arquivado')});
-    case'desarquivar':return write(d.id,{arquivado:false,log:logPlus(d,'Reativado')});
+    case'desarquivar':return write(d.id,{arquivado:false,...(isCancel(d)?{motivoTipo:null}:{}),log:logPlus(d,'Reativado')});
+    case'ctrl_rep':return reprovar(d);
   }
 }
 
@@ -410,7 +446,7 @@ function filtered(){
     if(stageFilter){if(d.etapa!==stageFilter||d.arquivado)return false}
     else if(!all&&(d.arquivado||d.etapa==='liberado'))return false;
     if(ob&&d.obra!==ob)return false;
-    if(q){const h=[d.titulo,d.obra,d.empreiteiro,d.contrato,d.rm,d.cotacao,d.notas].join(' ').toLowerCase();if(!h.includes(q))return false}
+    if(q){const h=[d.titulo,d.obra,d.empreiteiro,d.contrato,d.rm,d.cotacao,d.notas,d.motivo].join(' ').toLowerCase();if(!h.includes(q))return false}
     return true;
   }).map(d=>({d,s:status(d)})).sort((a,b)=>(b.s.late?1:0)-(a.s.late?1:0)||(a.d.arquivado?1:0)-(b.d.arquivado?1:0)||IDX[b.d.etapa]-IDX[a.d.etapa]||(b.s.n||0)-(a.s.n||0));
 }
@@ -465,6 +501,8 @@ function render(){
       <div class="stage-row"><span class="stage-name"><span class="num">${pad(i+1)}/12</span>${esc(STAGES[i].n)}</span><span class="chip ${s.chip}">${esc(s.label)}</span></div>
       <p class="next">${esc(nextText(d))}</p>
       ${d.estouro==='sim'&&i<=IDX.aprov_gestao?'<p class="sub">Com estouro de insumo: precisa de coord. + gerente.</p>':''}
+      ${repAberta(d)&&!d.arquivado?`<p class="sub bad">Reprovado pelo Controle em ${fmtD(d.motivoData)}: ${esc(d.motivo||'sem motivo informado')}</p>`:''}
+      ${d.arquivado&&isCancel(d)?`<p class="sub bad">Motivo do cancelamento: ${esc(d.motivo||'não informado')}</p>`:''}
       <div class="card-actions"${selMode?' hidden':''}>${acts}<span class="spacer"></span>${ids?`<span class="mono muted" style="font-size:.78rem">${ids}</span>`:''}<button type="button" class="ghost" data-open="${esc(d.id)}">Detalhes</button></div>
     </article>`}).join('');
 }
@@ -479,8 +517,9 @@ function openDlg(d){
   v('#f_valor',d?.valor!=null?d.valor.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');
   v('#f_etapa',d?.etapa||'necessidade');v('#f_entrada',d?(d.entradas?.[d.etapa]||''):today());
   v('#f_insumo',d?.insumoExiste);v('#f_alocPed',d?.alocacaoSolicitada);v('#f_alocOk',d?.alocacaoOk);v('#f_estouro',d?.estouro);
-  v('#f_rm',d?.rm);v('#f_cot',d?.cotacao);v('#f_notas',d?.notas);
-  $('#histBox').hidden=!d;$('#btnDel').hidden=!d;$('#btnArch').hidden=!d;
+  v('#f_rm',d?.rm);v('#f_cot',d?.cotacao);v('#f_notas',d?.notas);v('#f_motivo',d?.motivo);
+  $('#f_motivoLbl').textContent=d?.motivoTipo==='reprova'?'Motivo da reprova do Controle'+(d.motivoData?' ('+fmtD(d.motivoData)+')':''):d?.motivoTipo==='cancelamento'?'Motivo do cancelamento'+(d.motivoData?' ('+fmtD(d.motivoData)+')':''):'Motivo (reprova do Controle / cancelamento)';
+  $('#histBox').hidden=!d;$('#btnDel').hidden=!d;$('#btnArch').hidden=!d;$('#btnCancel').hidden=!d||!!d.arquivado;
   resetDel();
   if(d){
     $('#btnArch').textContent=d.arquivado?'Reativar':'Arquivar';
@@ -500,7 +539,7 @@ $('#frm').addEventListener('submit',async e=>{
   const etapa=g('#f_etapa'), entrada=g('#f_entrada')||today();
   const base={titulo:g('#f_titulo'),obra:g('#f_obra'),empreiteiro:g('#f_empreiteiro'),contrato:g('#f_contrato'),valor:parseMoney(g('#f_valor')),
     etapa,insumoExiste:g('#f_insumo')||null,alocacaoSolicitada:g('#f_alocPed')||null,alocacaoOk:g('#f_alocOk')||null,estouro:g('#f_estouro')||null,
-    rm:g('#f_rm'),cotacao:g('#f_cot'),notas:$('#f_notas').value,atualizado:new Date().toISOString()};
+    rm:g('#f_rm'),cotacao:g('#f_cot'),notas:$('#f_notas').value,motivo:$('#f_motivo').value.trim(),atualizado:new Date().toISOString()};
   const btn=$('#btnSave');btn.disabled=true;
   try{
     if(!editing){
@@ -533,6 +572,7 @@ $('#btnDel').addEventListener('click',async()=>{
 $('#btnArch').addEventListener('click',async()=>{
   const d=editing;$('#dlg').close();await doAction(d.arquivado?'desarquivar':'arquivar',d);
 });
+$('#btnCancel').addEventListener('click',async()=>{const d=editing;$('#dlg').close();await cancelar(d)});
 
 /* Ajustes */
 function openCfg(){
@@ -549,8 +589,8 @@ $('#cfgFrm').addEventListener('submit',async e=>{
 
 /* CSV */
 async function exportCsv(rows){
-  const head=['Descrição','Obra','Empreiteiro','Contrato','Valor','Etapa nº','Etapa','Entrou na etapa','Dias úteis na etapa','Prazo','Situação','Insumo existe','Estouro','RM','Cotação','Cadastrado','Arquivado','Observações'];
-  const lines=rows.map(d=>{const s=status(d),i=IDX[d.etapa];return[d.titulo,d.obra,d.empreiteiro,d.contrato,d.valor!=null?String(d.valor).replace('.',','):'',i+1,STAGES[i].n,fmtD(d.entradas?.[d.etapa]),s.n??'',slaOf(d.etapa),s.late?'Atrasado':s.cls==='warn'?'No limite':s.cls==='done'?'Concluído':'No prazo',d.insumoExiste||'',d.estouro||'',d.rm,d.cotacao,fmtD(d.criado),d.arquivado?'sim':'',d.notas]});
+  const head=['Descrição','Obra','Empreiteiro','Contrato','Valor','Etapa nº','Etapa','Entrou na etapa','Dias úteis na etapa','Prazo','Situação','Insumo existe','Estouro','RM','Cotação','Cadastrado','Arquivado','Reprova / cancelamento','Motivo','Observações'];
+  const lines=rows.map(d=>{const s=status(d),i=IDX[d.etapa];return[d.titulo,d.obra,d.empreiteiro,d.contrato,d.valor!=null?String(d.valor).replace('.',','):'',i+1,STAGES[i].n,fmtD(d.entradas?.[d.etapa]),s.n??'',slaOf(d.etapa),s.late?'Atrasado':s.cls==='warn'?'No limite':s.cls==='done'?'Concluído':'No prazo',d.insumoExiste||'',d.estouro||'',d.rm,d.cotacao,fmtD(d.criado),d.arquivado?'sim':'',d.motivoTipo==='reprova'?'Reprovado pelo Controle '+fmtD(d.motivoData):d.motivoTipo==='cancelamento'?'Cancelado '+fmtD(d.motivoData):'',d.motivo||'',d.notas]});
   const csv='﻿'+[head,...lines].map(r=>r.map(c=>{c=String(c??'');return/[;"\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c}).join(';')).join('\r\n');
   try{const dl=await claude.use('downloads');if(!dl){toast('Exportação indisponível nesta visualização.');return}
     await dl.save({filename:'aditivos-'+today()+'.csv',data:new Blob([csv],{type:'text/csv;charset=utf-8'})})}
@@ -631,14 +671,14 @@ async function bulk(list,fn,okMsg){
 $('#bAdv').onclick=async()=>{
   const all=selRows(), can=all.filter(d=>!d.arquivado&&actions(d)[0].id==='adv'), skip=all.length-can.length;
   if(!can.length){toast('Nenhum dos selecionados pode avançar direto: precisam de decisão (insumo / Controle) ou já estão no fim.');return}
-  await bulk(can,d=>{const to=nextKey(d);return upd(d,{etapa:to,entradas:{[to]:today()},log:logPlus(d,'Etapa: '+STAGES[IDX[to]].n+' (em lote)')})},
+  await bulk(can,d=>{const to=nextKey(d);return upd(d,{...resolveRep(d,to),etapa:to,entradas:{[to]:today()},log:logPlus(d,'Etapa: '+STAGES[IDX[to]].n+' (em lote)')})},
     can.length+' avançados'+(skip?`; ${skip} ficaram (precisam de decisão no cartão)`:''));
 };
 $('#bMove').onchange=async e=>{
   const to=e.target.value;e.target.value='';if(!to)return;
   const list=selRows().filter(d=>d.etapa!==to);
   if(!list.length){toast('Todos já estão nessa etapa.');return}
-  await bulk(list,d=>upd(d,{etapa:to,entradas:{[to]:today()},log:logPlus(d,'Movido para '+STAGES[IDX[to]].n+' (em lote)')}),list.length+' movidos para '+STAGES[IDX[to]].n);
+  await bulk(list,d=>upd(d,{...resolveRep(d,to),etapa:to,entradas:{[to]:today()},log:logPlus(d,'Movido para '+STAGES[IDX[to]].n+' (em lote)')}),list.length+' movidos para '+STAGES[IDX[to]].n);
 };
 $('#bArch').onclick=()=>{const l=selRows().filter(d=>!d.arquivado);bulk(l,d=>upd(d,{arquivado:true,log:logPlus(d,'Arquivado (em lote)')}),l.length+' arquivados')};
 $('#bUnarch').onclick=()=>{const l=selRows().filter(d=>d.arquivado);bulk(l,d=>upd(d,{arquivado:false,log:logPlus(d,'Reativado (em lote)')}),l.length+' reativados')};
@@ -683,9 +723,10 @@ const IMP_FIELDS=[
  {k:'obra',n:'Obra',pats:[/^obra$/,/empreendimento/,/\bobra\b/,/centro de custo/]},
  {k:'empreiteiro',n:'Empreiteiro / fornecedor',pats:[/empreiteir/,/fornecedor/,/credor/,/razao social/,/agente/]},
  {k:'valor',n:'Valor (R$)',pats:[/^(valor|vl|vlr) total$/,/^valor$/,/^total$/,/valor|vlr/]},
- {k:'status',n:'Status / situação',pats:[/^status$/,/^situacao$/,/situacao|status/,/fase/]}
+ {k:'status',n:'Status / situação',pats:[/^status$/,/^situacao$/,/situacao|status/,/fase/]},
+ {k:'motivo',n:'Motivo (reprova / cancelamento)',pats:[/^motivo$/,/motivo/,/justificativ/,/parecer/]}
 ];
-const IMP_LABEL={rm:'RM',cotacao:'cotação',contrato:'contrato',titulo:'descrição',obra:'obra',empreiteiro:'empreiteiro',valor:'valor',etapa:'etapa',arquivado:'arquivado'};
+const IMP_LABEL={rm:'RM',cotacao:'cotação',contrato:'contrato',titulo:'descrição',obra:'obra',empreiteiro:'empreiteiro',valor:'valor',etapa:'etapa',arquivado:'cancelado',reprova:'reprovado pelo Controle',motivo:'motivo'};
 let imp=null, impCfg={};
 const norm=s=>String(s??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 const keyOf=v=>{let s=String(v??'').trim();if(/^\d+\.0+$/.test(s))s=s.split('.')[0];return s.replace(/[^0-9a-z]/gi,'').toUpperCase().replace(/^0+(?=.)/,'')};
@@ -726,7 +767,7 @@ function guessMap(headers){
   IMP_FIELDS.forEach(f=>{if(m[f.k]==null)m[f.k]=-1});
   return m;
 }
-function guessStage(v){const s=norm(v);if(/cancel|reprov|recus|estorn/.test(s))return'__arq';return''}
+function guessStage(v){const s=norm(v);if(/cancel|estorn/.test(s))return'__arq';if(/reprov|recus|rejeit|negad/.test(s))return'__rep';return''}
 
 function openImp(){
   if(!db){toast('Sem conexão com o armazenamento. Abra logado no claude.ai.');return}
@@ -779,7 +820,7 @@ function renderStBox(){
   if(c<0){box.innerHTML='';return}
   const vals=[...new Set(imp.data.map(r=>cellStr(r[c])).filter(Boolean))].slice(0,40);
   if(!vals.length){box.innerHTML='';return}
-  const stOpts=v=>{const cur=imp.stmap[v]??guessStage(v);return`<option value="">Não mudar a etapa</option>${STAGES.map((s,i)=>`<option value="${s.k}" ${cur===s.k?'selected':''}>${pad(i+1)} · ${esc(s.n)}</option>`).join('')}<option value="__arq" ${cur==='__arq'?'selected':''}>Arquivar</option>`};
+  const stOpts=v=>{const cur=imp.stmap[v]??guessStage(v);return`<option value="">Não mudar a etapa</option>${STAGES.map((s,i)=>`<option value="${s.k}" ${cur===s.k?'selected':''}>${pad(i+1)} · ${esc(s.n)}</option>`).join('')}<option value="__rep" ${cur==='__rep'?'selected':''}>Reprovado pelo Controle (volta p/ Subir RM)</option><option value="__arq" ${cur==='__arq'?'selected':''}>Cancelado (arquivar)</option>`};
   box.innerHTML=`<div class="field"><span class="label">Cada status do Mega leva para qual etapa?</span>
     <div class="maprow">${vals.map((v,i)=>`<label for="st_${i}">${esc(v)}</label><select id="st_${i}" data-st="${esc(v)}">${stOpts(v)}</select>`).join('')}</div>
     <span class="note">Fica salvo para as próximas importações. Um aditivo só avança: se no painel ele já estiver numa etapa mais à frente, a etapa é mantida.</span></div>`;
@@ -793,7 +834,7 @@ function buildPlan(){
     if(!gk){semChave++;continue}
     let g=groups.get(gk);if(!g){g={raw:{},valor:null,status:'',n:0};groups.set(gk,g)}
     g.n++;
-    for(const k of ['rm','cotacao','contrato','titulo','obra','empreiteiro'])if(!g.raw[k]){const v=cellStr(get(r,k));if(v)g.raw[k]=v}
+    for(const k of ['rm','cotacao','contrato','titulo','obra','empreiteiro','motivo'])if(!g.raw[k]){const v=cellStr(get(r,k));if(v)g.raw[k]=v}
     const v=M.valor>=0?cellNum(get(r,'valor')):null;if(v!=null)g.valor=Math.round(((g.valor||0)+v)*100)/100;
     if(!g.status)g.status=cellStr(get(r,'status'));
   }
@@ -812,25 +853,39 @@ function buildPlan(){
     if(d==='amb'){plan.push({type:'amb',id,g});continue}
     if(!d){
       if(!imp.createNew||st==='__arq'){plan.push({type:'none',id,g});continue}
-      const etapa=STAGES[IDX[st]]?st:coK?'cotacao':rmK?'aprov_controle':'necessidade';
+      const rep=st==='__rep';
+      const etapa=rep?'rm':STAGES[IDX[st]]?st:coK?'cotacao':rmK?'aprov_controle':'necessidade';
       const doc={titulo:g.raw.titulo||id,obra:g.raw.obra||'',empreiteiro:g.raw.empreiteiro||'',contrato:g.raw.contrato||'',valor:g.valor,etapa,
         insumoExiste:null,alocacaoSolicitada:null,alocacaoOk:null,estouro:null,rm:g.raw.rm||'',cotacao:g.raw.cotacao||'',notas:'',
+        ...(rep?{motivoTipo:'reprova',motivo:g.raw.motivo||'',motivoData:today(),reprovaResolvida:false}:{}),
         entradas:{[etapa]:today()},criado:today(),arquivado:false,atualizado:new Date().toISOString(),
-        log:[{t:today(),msg:'Cadastrado pela planilha do Mega ('+imp.file+') na etapa '+STAGES[IDX[etapa]].n}]};
-      plan.push({type:'new',id,g,doc,ch:[{k:'etapa',to:etapa},...(g.valor!=null?[{k:'valor',to:g.valor}]:[])]});continue;
+        log:[{t:today(),msg:'Cadastrado pela planilha do Mega ('+imp.file+') na etapa '+STAGES[IDX[etapa]].n+(rep?' (reprovado pelo Controle'+(g.raw.motivo?': '+g.raw.motivo:'')+')':'')}]};
+      plan.push({type:'new',id,g,doc,ch:[{k:'etapa',to:etapa},...(rep?[{k:'reprova',to:true}]:[]),...(rep&&g.raw.motivo?[{k:'motivo',to:g.raw.motivo}]:[]),...(g.valor!=null?[{k:'valor',to:g.valor}]:[])]});continue;
     }
     const patch={},ch=[];
     const put=(k,to)=>{patch[k]=to;ch.push({k,from:d[k],to})};
     for(const k of ['rm','cotacao','contrato'])if(g.raw[k]&&keyOf(d[k])!==keyOf(g.raw[k]))put(k,g.raw[k]);
     for(const k of ['titulo','obra','empreiteiro'])if(g.raw[k]&&!String(d[k]||'').trim())put(k,g.raw[k]);
     if(g.valor!=null&&(typeof d.valor!=='number'||Math.abs(d.valor-g.valor)>0.005))put('valor',g.valor);
-    if(st==='__arq'){if(!d.arquivado)put('arquivado',true)}
-    else if(st&&!d.arquivado&&IDX[st]>IDX[d.etapa]){put('etapa',st);patch.entradas={[st]:today()}}
+    const mot=g.raw.motivo||'';
+    if(st==='__arq'){
+      if(!d.arquivado){put('arquivado',true);Object.assign(patch,{motivoTipo:'cancelamento',motivoData:today()});if(mot)put('motivo',mot)}
+      else if(isCancel(d)&&mot&&mot!==d.motivo)put('motivo',mot);
+    }else if(st==='__rep'){
+      // Reprova nova (ou com outro motivo) e o aditivo ainda não passou da aprovação: volta para Subir RM
+      const nova=d.motivoTipo!=='reprova'||(mot&&mot!==d.motivo);
+      if(!d.arquivado&&nova&&IDX[d.etapa]>=IDX.rm&&IDX[d.etapa]<=IDX.aprov_gestao){
+        ch.push({k:'reprova',from:false,to:true});
+        Object.assign(patch,{motivoTipo:'reprova',motivoData:today(),reprovaResolvida:false});
+        if(mot)put('motivo',mot);
+        if(d.etapa!=='rm'){put('etapa','rm');patch.entradas={rm:today()}}
+      }else if(repAberta(d)&&mot&&!d.motivo)put('motivo',mot);
+    }else if(st&&!d.arquivado&&IDX[st]>IDX[d.etapa]){put('etapa',st);patch.entradas={[st]:today()};Object.assign(patch,resolveRep(d,st))}
     plan.push({type:ch.length?'upd':'same',id,g,d,patch,ch});
   }
   return{plan,semChave};
 }
-const fmtImp=(k,v)=>v==null||v===''?'vazio':k==='valor'?brl(v):k==='etapa'?STAGES[IDX[v]]?.n||v:k==='arquivado'?(v?'sim':'não'):String(v);
+const fmtImp=(k,v)=>(k==='arquivado'||k==='reprova')?(v?'sim':'não'):v==null||v===''?'vazio':k==='valor'?brl(v):k==='etapa'?STAGES[IDX[v]]?.n||v:(k==='arquivado'||k==='reprova')?(v?'sim':'não'):String(v);
 function impStep3(){
   const {plan,semChave}=buildPlan();imp.plan=plan;
   const c=t=>plan.filter(p=>p.type===t);
@@ -864,7 +919,7 @@ async function impApply(){
   const b=$('#impApply');b.disabled=true;b.textContent='Gravando…';
   const r=await Promise.allSettled(chosen.map(p=>p.type==='new'?db.collection('aditivos').add(p.doc):
     db.doc('aditivos/'+p.d.id).update({...p.patch,atualizado:new Date().toISOString(),
-      log:logPlus(p.d,'Atualizado pela planilha do Mega: '+p.ch.map(x=>x.k==='etapa'?'etapa → '+STAGES[IDX[x.to]].n:x.k==='arquivado'?'arquivado':IMP_LABEL[x.k]+' '+fmtImp(x.k,x.to)).join(', '))})));
+      log:logPlus(p.d,'Atualizado pela planilha do Mega: '+p.ch.map(x=>x.k==='etapa'?'etapa → '+STAGES[IDX[x.to]].n:x.k==='arquivado'?'cancelado':x.k==='reprova'?'reprovado pelo Controle':IMP_LABEL[x.k]+' '+fmtImp(x.k,x.to)).join(', '))})));
   const cols={};IMP_FIELDS.forEach(f=>{if(imp.map[f.k]>=0)cols[f.k]=imp.headers[imp.map[f.k]]});
   try{await db.doc('config/importMega').set({cols,status:imp.stmap})}catch(e){}
   const fail=r.filter(x=>x.status==='rejected').length;
