@@ -120,6 +120,12 @@ dialog::backdrop{background:rgba(10,15,12,.5)}
 .btn.del{color:var(--bad);border-color:transparent;background:none;padding-inline:4px}
 .preview{white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;font-size:.92rem;max-height:46vh;overflow:auto;user-select:text;-webkit-user-select:text}
 
+.btn.ghost{background:none;border-color:transparent;color:var(--muted)}
+.btn.ghost:hover{color:var(--accent)}
+.list.arq{max-height:52vh;overflow:auto}
+.list.arq .item{align-items:center;padding-left:14px;gap:10px}
+.list.arq .body{cursor:default}
+.list.arq .btn{flex:0 0 auto;margin-right:10px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-weight:500;z-index:20;display:flex;gap:14px;align-items:center;max-width:calc(100vw - 32px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .toast button{background:none;border:0;color:var(--accent-soft);font-weight:700;padding:0;text-decoration:underline}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -165,8 +171,11 @@ dialog::backdrop{background:rgba(10,15,12,.5)}
   <details class="dn" id="doneWrap">
     <summary class="sec"><h2 id="doneTitle">Concluídas</h2></summary>
     <ul class="list" id="done"></ul>
-    <div class="bar" style="margin-top:8px"><span class="sp"></span><button class="btn sm" id="btnClear" type="button">Apagar concluídas</button></div>
+    <div class="bar" style="margin-top:8px"><span class="sp"></span><button class="btn sm" id="btnClear" type="button">Arquivar concluídas</button></div>
   </details>
+  <div class="bar"><span class="sp"></span><button class="btn sm ghost" id="btnArq" type="button">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg>
+    Ver arquivo</button></div>
 </div></main>
 
 <dialog id="dlgEdit">
@@ -184,6 +193,19 @@ dialog::backdrop{background:rgba(10,15,12,.5)}
       <button type="submit" class="btn pri">Salvar</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="dlgArq">
+  <div class="dlg">
+    <h2 id="aTitle">Arquivo</h2>
+    <p id="aMsg" style="margin:0;color:var(--muted)">Tarefas concluídas que você arquivou. Toque em Restaurar para voltar uma para a lista.</p>
+    <ul class="list arq" id="aList"></ul>
+    <div class="row">
+      <button type="button" class="btn del" id="aDel">Apagar arquivo desta lista</button>
+      <span class="sp"></span>
+      <button type="button" class="btn pri" id="aClose">Fechar</button>
+    </div>
+  </div>
 </dialog>
 
 <dialog id="dlgCopy">
@@ -308,7 +330,56 @@ function onList(e){
   else openEdit(r,b.dataset.act==='note');
 }
 $('#open').addEventListener('click',onList);$('#done').addEventListener('click',onList);
-$('#btnClear').onclick=()=>remove(rows.filter(r=>inView(r)&&r.feito).map(r=>r.id));
+$('#btnClear').onclick=()=>archive(rows.filter(r=>inView(r)&&r.feito).map(r=>r.id));
+
+/* Arquivo: tarefas arquivadas ficam em outra coleção, carregada só quando você abre */
+let arqRows=[],arqConfirm=false;
+async function archive(ids){
+  if(!ids.length)return;
+  if(!db){toast('Sem conexão: abra logado no claude.ai para arquivar.');return}
+  const moving=rows.filter(r=>ids.includes(r.id));
+  rows=rows.filter(r=>!ids.includes(r.id));saveCache();render();
+  let fail=0;
+  for(const r of moving){
+    try{await db.doc('arquivo/'+r.id).set({...strip(r),arquivado:today(),arquivadoTs:Date.now()});await db.doc('tarefas/'+r.id).delete()}
+    catch(e){fail++;rows.push(r)}
+  }
+  if(fail){saveCache();render();toast('Algumas tarefas não foram arquivadas. Tente de novo.');return}
+  toast(moving.length===1?'1 tarefa arquivada':moving.length+' tarefas arquivadas',()=>restore(moving.map(r=>r.id),moving));
+}
+async function restore(ids,known){
+  if(!db)return;
+  for(const id of ids){
+    const r=(known||arqRows).find(x=>x.id===id);if(!r)continue;
+    const {arquivado,arquivadoTs,...d}=strip(r);
+    try{await db.doc('tarefas/'+id).set(d);await db.doc('arquivo/'+id).delete();arqRows=arqRows.filter(x=>x.id!==id)}
+    catch(e){toast('Não foi possível restaurar. Tente de novo.');return}
+  }
+  if($('#dlgArq').open)renderArq();
+}
+function arqView(){return arqRows.filter(r=>r.lista===cur&&(cur!=='equipe'||!resp||(r.resp||'').trim()===resp)).sort((a,b)=>(b.concluidoTs||b.arquivadoTs||0)-(a.concluidoTs||a.arquivadoTs||0))}
+function renderArq(){
+  const l=LISTS.find(x=>x.k===cur),v=arqView();
+  $('#aTitle').textContent='Arquivo — '+l.n+(cur==='equipe'&&resp?' · '+resp:'')+' ('+v.length+')';
+  $('#aList').innerHTML=v.length?v.map(r=>`<li class="item done" data-id="${r.id}"><span class="body"><span class="txt">${esc(r.texto)}</span>${r.obs?`<span class="obs">${esc(r.obs)}</span>`:''}<span class="meta">${r.lista==='equipe'&&r.resp?`<span class="tag r">${esc(r.resp)}</span>`:''}anotado ${fmtD(r.criado)} · feito ${fmtD(r.concluido)}</span></span><button class="btn sm" data-restore="${r.id}">Restaurar</button></li>`).join(''):'<li class="empty"><b>Arquivo vazio</b>Use "Arquivar concluídas" no fim da lista para guardar aqui o que já foi feito.</li>';
+  $('#aDel').hidden=!v.length;arqConfirm=false;$('#aDel').textContent='Apagar arquivo desta lista';
+}
+$('#btnArq').onclick=async()=>{
+  if(!db){toast('Sem conexão: abra logado no claude.ai para ver o arquivo.');return}
+  $('#aList').innerHTML='<li class="empty">Carregando arquivo…</li>';$('#aDel').hidden=true;
+  $('#aTitle').textContent='Arquivo — '+LISTS.find(x=>x.k===cur).n;
+  $('#dlgArq').showModal();
+  try{const s=await db.collection('arquivo').where('lista','==',cur).get();arqRows=arqRows.filter(r=>r.lista!==cur).concat(s.docs.map(x=>({id:x.id,...x.data()})));renderArq()}
+  catch(e){$('#aList').innerHTML='<li class="empty">Não foi possível carregar o arquivo. Feche e tente de novo.</li>'}
+};
+$('#aList').addEventListener('click',e=>{const b=e.target.closest('[data-restore]');if(!b)return;b.disabled=true;b.textContent='Restaurando…';restore([b.dataset.restore]).then(()=>toast('Tarefa restaurada'))});
+$('#aDel').onclick=async()=>{
+  if(!arqConfirm){arqConfirm=true;$('#aDel').textContent='Toque de novo para apagar de vez';return}
+  const ids=arqView().map(r=>r.id);$('#aDel').disabled=true;
+  for(const id of ids){try{await db.doc('arquivo/'+id).delete();arqRows=arqRows.filter(r=>r.id!==id)}catch(e){}}
+  $('#aDel').disabled=false;renderArq();toast(ids.length+' tarefas apagadas do arquivo');
+};
+$('#aClose').onclick=()=>$('#dlgArq').close();
 
 $('#eLista').innerHTML=LISTS.map(l=>`<option value="${l.k}">${l.t}</option>`).join('');
 $('#eLista').onchange=()=>$('#eRespLbl').hidden=$('#eLista').value!=='equipe';
