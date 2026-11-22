@@ -136,6 +136,25 @@ dialog::backdrop{background:rgba(10,15,12,.5)}
 .list.arq .item{align-items:center;padding-left:14px;gap:10px}
 .list.arq .body{cursor:default}
 .list.arq .btn{flex:0 0 auto;margin-right:10px}
+.item{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.selecting .box{border-radius:50%}
+.selecting .item .box,.selecting .item.done .box{background:none;border-color:var(--muted)}
+.selecting .item .box svg{opacity:0}
+.selecting .item.sel{background:var(--accent-soft)}
+.selecting .item.sel .box{background:var(--accent);border-color:var(--accent)}
+.selecting .item.sel .box svg{opacity:1;color:var(--accent-ink)}
+.selecting .star,.selecting .note{pointer-events:none;opacity:.35}
+.selecting .add{display:none}
+.bulk{position:fixed;left:0;right:0;bottom:0;z-index:15;background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -6px 24px rgba(0,0,0,.12);padding-block:10px calc(10px + env(safe-area-inset-bottom,0px))}
+.bulk .in{display:grid;gap:8px}
+.bulk .hd{display:flex;align-items:center;gap:8px}
+.bulk .hd b{flex:1;font-family:var(--f-head);font-size:1.05rem}
+.bulk .acts{display:flex;flex-wrap:wrap;gap:6px}
+.bulk .acts::-webkit-scrollbar{display:none}
+.bulk .acts .btn{flex:0 0 auto}
+.bulk .btn.danger{color:var(--bad)}
+.selecting .toast{bottom:calc(150px + env(safe-area-inset-bottom,0px))}
+.selecting main{padding-bottom:180px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-weight:500;z-index:20;display:flex;gap:14px;align-items:center;max-width:calc(100vw - 32px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .toast button{background:none;border:0;color:var(--accent-soft);font-weight:700;padding:0;text-decoration:underline}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -175,6 +194,9 @@ dialog::backdrop{background:rgba(10,15,12,.5)}
   <div class="bar">
     <div class="chips" id="chips" hidden></div>
     <span class="sp"></span>
+    <button class="btn sm" id="btnSel" type="button">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><path d="M14 6.5h7M14 17.5h7"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M4.8 6.6l1.6 1.6 2.8-3"/></svg>
+      Selecionar</button>
     <button class="btn sm" id="btnCopy" type="button">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
       Copiar para WhatsApp
@@ -231,6 +253,33 @@ dialog::backdrop{background:rgba(10,15,12,.5)}
   </div>
 </dialog>
 
+<div class="bulk gut" id="bulk" hidden>
+  <div class="in">
+    <div class="hd">
+      <b id="bCount">0 selecionadas</b>
+      <button type="button" class="btn sm" id="bAll">Todas</button>
+      <button type="button" class="btn sm" id="bExit" aria-label="Sair da seleção">Cancelar</button>
+    </div>
+    <div class="acts">
+      <button type="button" class="btn sm pri" id="bDone">Concluir</button>
+      <button type="button" class="btn sm" id="bPrio">Prioridade</button>
+      <button type="button" class="btn sm" id="bCopy">Copiar</button>
+      <button type="button" class="btn sm" id="bMove">Mover</button>
+      <button type="button" class="btn sm" id="bResp">Responsável</button>
+      <button type="button" class="btn sm" id="bArq">Arquivar</button>
+      <button type="button" class="btn sm danger" id="bDel">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<dialog id="dlgBulk">
+  <form class="dlg" id="bulkFrm" method="dialog">
+    <h2 id="bkTitle">Mover</h2>
+    <div id="bkBody" style="display:grid;gap:12px"></div>
+    <div class="row"><span class="sp"></span><button type="button" class="btn" id="bkCancel">Cancelar</button><button type="submit" class="btn pri" id="bkOk">Aplicar</button></div>
+  </form>
+</dialog>
+
 <dialog id="dlgCopy">
   <div class="dlg">
     <h2 id="cTitle">Texto copiado</h2>
@@ -264,6 +313,7 @@ const ICON_ST='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.9
 const ICON_NOTE='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4z"/><path d="M8 8h8M8 12h5"/></svg>';
 const ICON_ST_O='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6L2.5 9.4l6.6-.8z"/></svg>';
 
+let selMode=false,sel=new Set(),longFired=false;
 let rows=[],db=null,loaded=false,editing=null,addPrio=false;
 let cur='rotina',resp='';
 try{cur=localStorage.getItem('lo-tab')||'rotina';if(!LISTS.some(l=>l.k===cur))cur='rotina'}catch(e){}
@@ -350,6 +400,7 @@ function render(){
   $('#doneWrap').hidden=!done.length;
   $('#doneTitle').textContent='Concluídas ('+done.length+')';
   $('#done').innerHTML=done.map(item).join('');
+  renderBulk();
 }
 function item(r){
   const rot=r.lista==='rotina'&&!r.feito,st=rot?rotStatus(r):null,fe=!!r.feito;
@@ -358,7 +409,7 @@ function item(r){
   if(r.lista==='equipe'&&r.resp)meta.push(`<span class="tag r">${esc(r.resp)}</span>`);
   if(rot){meta.push(`<span class="tag st ${st.s}">${esc(st.label)}</span>`);meta.push(esc(perLabel(r)))}
   else meta.push(fe?'feito '+fmtD(r.concluido):'anotado '+fmtD(r.criado));
-  return `<li class="item${r.prio&&!fe?' prio':''}${fe?' done':''}${rot&&st.s==='late'?' late':''}" data-id="${r.id}">
+  return `<li class="item${r.prio&&!fe?' prio':''}${fe?' done':''}${rot&&st.s==='late'?' late':''}${sel.has(r.id)?' sel':''}" data-id="${r.id}">
     <button class="ck" data-act="ck" aria-label="${fe?'Desmarcar':'Marcar como feito'}"><span class="box">${ICON_CK}</span></button>
     <button class="body" data-act="edit" aria-label="Editar"><span class="txt">${esc(r.texto)}</span>${r.obs?`<span class="obs">${esc(r.obs)}</span>`:''}<span class="meta">${meta.join('')}</span></button>
     <button class="note${r.obs?' has':''}" data-act="note" aria-label="${r.obs?'Editar observação':'Adicionar observação'}" title="Observação">${ICON_NOTE}</button>
@@ -384,7 +435,7 @@ async function remove(ids){
 }
 
 /* Eventos */
-$('#tabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)return;cur=b.dataset.k;resp='';try{localStorage.setItem('lo-tab',cur)}catch(e){}render();$('#addTxt').focus({preventScroll:true})});
+$('#tabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)return;if(b.dataset.k!==cur)exitSel(true);cur=b.dataset.k;resp='';try{localStorage.setItem('lo-tab',cur)}catch(e){}render();$('#addTxt').focus({preventScroll:true})});
 $('#chips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;resp=b.dataset.resp;if(resp)$('#addResp').value=resp;render()});
 $('#addPrio').onclick=()=>{addPrio=!addPrio;$('#addPrio').setAttribute('aria-pressed',addPrio)};
 $('#addFrm').addEventListener('submit',e=>{
@@ -397,6 +448,8 @@ $('#addFrm').addEventListener('submit',e=>{
   $('#addTxt').value='';addPrio=false;$('#addPrio').setAttribute('aria-pressed','false');$('#addTxt').focus();
 });
 function onList(e){
+  if(longFired){longFired=false;return}
+  if(selMode){const li=e.target.closest('.item');if(li&&li.dataset.id)toggleSel(li.dataset.id);return}
   const b=e.target.closest('[data-act]');if(!b)return;
   const r=rows.find(x=>x.id===b.closest('.item').dataset.id);if(!r)return;
   if(b.dataset.act==='ck'&&r.lista==='rotina'&&!r.feito){
@@ -409,12 +462,12 @@ function onList(e){
   else openEdit(r,b.dataset.act==='note');
 }
 /* Rotina: concluir cria um registro em Concluídas e a mesma rotina segue para o próximo período */
-function concludeRot(r){
+function concludeRot(r,quiet){
   const t=today(),recId=uid();
   save(recId,{lista:'rotina',texto:r.texto,obs:r.obs||'',prio:false,feito:true,rotId:r.id,per:r.per||'diaria',dia:r.dia??null,hora:r.hora||'',criado:t,criadoTs:Date.now(),concluido:t,concluidoTs:Date.now()});
   save(r.id,{anterior:r.ultima||null,ultima:t,ultimaTs:Date.now(),ultimoReg:recId});
   const st=rotStatus({...r,ultima:t});
-  toast('Concluída. '+st.label.split(' · ')[0],()=>undoRot(r.id));
+  if(!quiet)toast('Concluída. '+st.label.split(' · ')[0],()=>undoRot(r.id));
 }
 function undoRot(id){
   const r=rows.find(x=>x.id===id);if(!r)return;
@@ -546,6 +599,9 @@ function buildText(){
 $('#btnCopy').onclick=async()=>{
   const {text,count}=buildText();
   if(!count){toast('Não há tarefas em aberto nesta lista');return}
+  showCopy(text);
+};
+async function showCopy(text){
   let ok=false;
   try{await navigator.clipboard.writeText(text);ok=true}catch(e){}
   $('#cTitle').textContent=ok?'Texto copiado':'Selecione e copie o texto';
@@ -554,8 +610,81 @@ $('#btnCopy').onclick=async()=>{
   $('#cWa').href='https://wa.me/?text='+encodeURIComponent(text);
   $('#dlgCopy').showModal();
   if(!ok){const s=getSelection(),rg=document.createRange();rg.selectNodeContents($('#cText'));s.removeAllRanges();s.addRange(rg)}
-};
+}
 $('#cClose').onclick=()=>$('#dlgCopy').close();
+
+/* Seleção de várias tarefas */
+function selRows(){return rows.filter(r=>sel.has(r.id))}
+function enterSel(id){selMode=true;sel.clear();if(id)sel.add(id);render()}
+function exitSel(silent){selMode=false;sel.clear();if(!silent)render()}
+function toggleSel(id){sel.has(id)?sel.delete(id):sel.add(id);render()}
+function renderBulk(){
+  document.body.classList.toggle('selecting',selMode);
+  $('#bulk').hidden=!selMode;
+  $('#btnSel').hidden=selMode;
+  if(!selMode)return;
+  const vis=new Set(rows.filter(inView).map(r=>r.id));
+  [...sel].forEach(id=>{if(!vis.has(id))sel.delete(id)});
+  const v=selRows(),n=v.length,open=v.filter(r=>!r.feito),done=v.filter(r=>r.feito);
+  $('#bCount').textContent=n?(n===1?'1 selecionada':n+' selecionadas'):'Toque nas tarefas';
+  $('#bAll').textContent=n&&n===vis.size?'Nenhuma':'Todas';
+  $('#bDone').textContent=n&&!open.length?'Reabrir':'Concluir';
+  $('#bDone').hidden=cur==='rotina'&&n>0&&!open.length;
+  $('#bPrio').textContent=open.length&&open.every(r=>r.prio)?'Tirar prioridade':'Prioridade';
+  $('#bPrio').hidden=n>0&&!open.length;
+  $('#bResp').hidden=cur!=='equipe';
+  $('#bArq').hidden=!done.length;
+  ['bDone','bPrio','bCopy','bMove','bResp','bArq','bDel'].forEach(k=>$('#'+k).disabled=!n);
+}
+$('#btnSel').onclick=()=>enterSel();
+$('#bExit').onclick=()=>exitSel();
+$('#bAll').onclick=()=>{const ids=rows.filter(inView).map(r=>r.id);if(sel.size===ids.length)sel.clear();else ids.forEach(id=>sel.add(id));render()};
+$('#bDone').onclick=()=>{
+  const v=selRows(),open=v.filter(r=>!r.feito),t=today();
+  if(open.length){let n=0;open.forEach(r=>{if(r.lista==='rotina'){if(!rotStatus(r).ck){concludeRot(r,true);n++}}else{save(r.id,{feito:true,concluido:t,concluidoTs:Date.now()});n++}});exitSel();toast(n===1?'1 tarefa concluída':n+' tarefas concluídas')}
+  else{v.forEach(r=>{if(r.lista!=='rotina')save(r.id,{feito:false,concluido:null,concluidoTs:null})});exitSel();toast(v.length===1?'1 tarefa reaberta':v.length+' tarefas reabertas')}
+};
+$('#bPrio').onclick=()=>{const open=selRows().filter(r=>!r.feito),on=!open.every(r=>r.prio);open.forEach(r=>save(r.id,{prio:on}));exitSel();toast(on?'Marcadas como prioridade':'Prioridade retirada')};
+$('#bDel').onclick=()=>{const ids=[...sel];exitSel();remove(ids)};
+$('#bArq').onclick=()=>{const ids=selRows().filter(r=>r.feito).map(r=>r.id);exitSel();archive(ids)};
+$('#bCopy').onclick=()=>{
+  const l=LISTS.find(x=>x.k===cur),v=selRows().sort(cur==='rotina'?sortRot:sortOpen);
+  const lines=['*'+(cur==='equipe'&&resp?'Tarefas — '+resp:l.t)+'* ('+fmtD(today())+')',''];
+  v.forEach((r,i)=>{const st=r.lista==='rotina'&&!r.feito?rotStatus(r):null;
+    lines.push((i+1)+'. '+r.texto+(r.feito?' ✅':'')+(cur==='equipe'&&!resp&&r.resp?' — _'+r.resp+'_':'')+(st&&st.s==='late'?' — *'+st.label+'*':'')+(r.obs?'\n   _Obs: '+r.obs.replace(/\n+/g,' / ')+'_':''))});
+  showCopy(lines.join('\n'));exitSel();
+};
+let bkApply=null;
+function openBulk(title,html,apply){$('#bkTitle').textContent=title;$('#bkBody').innerHTML=html;bkApply=apply;$('#dlgBulk').showModal()}
+$('#bkCancel').onclick=()=>$('#dlgBulk').close();
+$('#bulkFrm').addEventListener('submit',e=>{e.preventDefault();if(bkApply&&bkApply()!==false){$('#dlgBulk').close();exitSel()}});
+$('#bMove').onclick=()=>{
+  const n=sel.size;
+  openBulk('Mover '+(n===1?'1 tarefa':n+' tarefas'),
+    `<label style="display:grid;gap:4px;font-size:.85rem;color:var(--muted)">Para a lista<select id="bkLista">${LISTS.filter(l=>l.k!==cur).map(l=>`<option value="${l.k}">${l.t}</option>`).join('')}</select></label>
+     <label id="bkRespL" style="display:grid;gap:4px;font-size:.85rem;color:var(--muted)" hidden>Responsável<input id="bkResp" list="respList" placeholder="Nome"></label>
+     <p id="bkRotP" style="margin:0;font-size:.85rem;color:var(--muted)" hidden>Entram como rotina diária. Depois toque em cada uma para ajustar a frequência.</p>`,
+    ()=>{const to=$('#bkLista').value,rp=$('#bkResp').value.trim();
+      if(to==='equipe'&&!rp){toast('Informe o responsável');return false}
+      selRows().forEach(r=>{const d={lista:to};if(to==='equipe')d.resp=rp;if(to==='rotina'){d.per=r.per||'diaria';d.feito=false}if(r.lista==='rotina'&&!r.feito&&to!=='rotina'){d.feito=false}save(r.id,d)});
+      toast('Movidas para '+LISTS.find(l=>l.k===to).n)});
+  const upd=()=>{$('#bkRespL').hidden=$('#bkLista').value!=='equipe';$('#bkRotP').hidden=$('#bkLista').value!=='rotina'};
+  $('#bkLista').onchange=upd;upd();
+};
+$('#bResp').onclick=()=>{
+  const n=sel.size;
+  openBulk('Responsável de '+(n===1?'1 tarefa':n+' tarefas'),
+    `<label style="display:grid;gap:4px;font-size:.85rem;color:var(--muted)">Nome<input id="bkResp2" list="respList" placeholder="Nome do responsável"></label>`,
+    ()=>{const rp=$('#bkResp2').value.trim();if(!rp){toast('Informe o responsável');return false}selRows().forEach(r=>save(r.id,{resp:rp}));toast('Responsável: '+rp)});
+  setTimeout(()=>$('#bkResp2').focus(),50);
+};
+/* Toque longo numa tarefa também começa a seleção */
+let lpT=null,lpXY=null;
+function lpStart(e){const li=e.target.closest('.item');if(!li||!li.dataset.id||selMode)return;lpXY=[e.clientX,e.clientY];clearTimeout(lpT);lpT=setTimeout(()=>{longFired=true;enterSel(li.dataset.id);if(navigator.vibrate)try{navigator.vibrate(15)}catch(_){}},550)}
+function lpCancel(e){if(e&&e.type==='pointermove'&&lpXY&&Math.hypot(e.clientX-lpXY[0],e.clientY-lpXY[1])<10)return;clearTimeout(lpT);if(longFired&&e&&(e.type==='pointerup'||e.type==='pointercancel'))setTimeout(()=>longFired=false,350)}
+['#open','#done'].forEach(s=>{const el=$(s);el.addEventListener('pointerdown',lpStart);['pointerup','pointercancel','pointerleave','pointermove'].forEach(t=>el.addEventListener(t,lpCancel));el.addEventListener('contextmenu',e=>{if(e.target.closest('.item'))e.preventDefault()})});
+['pointerup','pointercancel'].forEach(t=>document.addEventListener(t,()=>{clearTimeout(lpT);if(longFired)setTimeout(()=>longFired=false,350)}));
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&selMode&&!document.querySelector('dialog[open]'))exitSel()});
 
 let toastT;
 function toast(m,undo){
