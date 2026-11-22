@@ -294,13 +294,13 @@ function rotStatus(r){
   const D0=isDl(r,t)?t:prevDl(r,t);
   if(D0===t){
     const P=prevDl(r,t);
-    if(u&&(!P||u>P))return{ck:true,s:'ok',label:u===t?'Feita hoje':'Feita '+dayName(u),rank:4};
+    if(u&&(!P||u>P)){const N=nextDl(r,t);return{ck:true,s:'ok',label:'Próxima: '+dayName(N)+(h?' até '+h:'')+' · feita '+dayName(u),rank:4}}
     if(P&&P>=c&&!(u&&u>(prevDl(r,P)||'')))return{s:'late',label:'Atrasada desde '+dayName(firstMiss(r,u,c)),rank:0};
     if(h&&nowHM()>h)return{s:'late',label:'Atrasada · era até '+h,rank:0};
     return{s:'today',label:'Para hoje'+(h?' até '+h:''),rank:1};
   }
   const N=nextDl(r,t);
-  if(u&&D0&&u>D0)return{ck:true,s:'ok',label:'Feita '+dayName(u)+' · próxima '+dayName(N),rank:4};
+  if(u&&D0&&u>D0)return{ck:true,s:'ok',label:'Próxima: '+dayName(N)+(h?' até '+h:'')+' · feita '+dayName(u),rank:4};
   if(D0&&D0>=c&&!(u&&u>(prevDl(r,D0)||''))){const f=firstMiss(r,u,c),n=Math.round((pd(t)-pd(f))/864e5);return{s:'late',label:'Atrasada desde '+dayName(f)+' ('+n+(n===1?' dia':' dias')+')',rank:0}}
   return{s:'next',label:'Próxima: '+dayName(N)+(h?' até '+h:''),rank:2};
 }
@@ -320,14 +320,13 @@ function render(){
   // Abas
   $('#tabs').innerHTML=LISTS.map(l=>{
     let open,cls='';
-    if(l.k==='rotina'){const st=rows.filter(r=>r.lista==='rotina').map(rotStatus);open=st.filter(x=>x.rank<2);if(st.some(x=>x.s==='late'))cls=' late'}
+    if(l.k==='rotina'){const st=rows.filter(r=>r.lista==='rotina'&&!r.feito).map(rotStatus);open=st.filter(x=>x.rank<2);if(st.some(x=>x.s==='late'))cls=' late'}
     else{open=rows.filter(r=>r.lista===l.k&&!r.feito);if(open.some(r=>r.prio))cls=' hot'}
     return `<button class="tab" role="tab" data-k="${l.k}" aria-selected="${l.k===cur}">${l.n}<span class="cnt${cls}">${open.length}</span></button>`;
   }).join('');
   const isEq=cur==='equipe';
   $('#respRow').hidden=!isEq;
   $('#rotRow').hidden=cur!=='rotina';
-  $('#btnArq').parentNode.hidden=cur==='rotina';
   $('#addTxt').placeholder='Anotar em '+LISTS.find(l=>l.k===cur).n+'…';
   // Responsáveis
   const names=respNames();
@@ -353,7 +352,7 @@ function render(){
   $('#done').innerHTML=done.map(item).join('');
 }
 function item(r){
-  const rot=r.lista==='rotina',st=rot?rotStatus(r):null,fe=rot?!!st.ck:!!fe;
+  const rot=r.lista==='rotina'&&!r.feito,st=rot?rotStatus(r):null,fe=!!r.feito;
   const meta=[];
   if(r.prio&&!fe)meta.push('<span class="tag p">Prioridade</span>');
   if(r.lista==='equipe'&&r.resp)meta.push(`<span class="tag r">${esc(r.resp)}</span>`);
@@ -400,10 +399,35 @@ $('#addFrm').addEventListener('submit',e=>{
 function onList(e){
   const b=e.target.closest('[data-act]');if(!b)return;
   const r=rows.find(x=>x.id===b.closest('.item').dataset.id);if(!r)return;
-  if(b.dataset.act==='ck'&&r.lista==='rotina'){if(rotStatus(r).ck)save(r.id,{ultima:r.anterior||null,anterior:null});else{save(r.id,{anterior:r.ultima||null,ultima:today(),ultimaTs:Date.now()});toast('Rotina feita: '+(rotStatus({...r,ultima:today()}).label))}}
+  if(b.dataset.act==='ck'&&r.lista==='rotina'&&!r.feito){
+    if(rotStatus(r).ck){toast('Já feita neste período.',()=>undoRot(r.id));return}
+    concludeRot(r);
+  }
+  else if(b.dataset.act==='ck'&&r.lista==='rotina'&&r.feito){undoRec(r)}
   else if(b.dataset.act==='ck')save(r.id,r.feito?{feito:false,concluido:null,concluidoTs:null}:{feito:true,concluido:today(),concluidoTs:Date.now()});
   else if(b.dataset.act==='prio')save(r.id,{prio:!r.prio});
   else openEdit(r,b.dataset.act==='note');
+}
+/* Rotina: concluir cria um registro em Concluídas e a mesma rotina segue para o próximo período */
+function concludeRot(r){
+  const t=today(),recId=uid();
+  save(recId,{lista:'rotina',texto:r.texto,obs:r.obs||'',prio:false,feito:true,rotId:r.id,per:r.per||'diaria',dia:r.dia??null,hora:r.hora||'',criado:t,criadoTs:Date.now(),concluido:t,concluidoTs:Date.now()});
+  save(r.id,{anterior:r.ultima||null,ultima:t,ultimaTs:Date.now(),ultimoReg:recId});
+  const st=rotStatus({...r,ultima:t});
+  toast('Concluída. '+st.label.split(' · ')[0],()=>undoRot(r.id));
+}
+function undoRot(id){
+  const r=rows.find(x=>x.id===id);if(!r)return;
+  const rec=rows.find(x=>x.id===r.ultimoReg)||rows.filter(x=>x.rotId===id&&x.feito&&x.concluido===r.ultima).sort(sortDone)[0];
+  save(id,{ultima:r.anterior||null,anterior:null,ultimoReg:null});
+  if(rec){rows=rows.filter(x=>x.id!==rec.id);saveCache();render();if(db)db.doc('tarefas/'+rec.id).delete().catch(()=>{})}
+  toast('Conclusão desfeita');
+}
+function undoRec(rec){
+  const tpl=rows.find(x=>x.id===rec.rotId);
+  if(tpl&&(tpl.ultimoReg===rec.id||tpl.ultima===rec.concluido)){undoRot(tpl.id);return}
+  rows=rows.filter(x=>x.id!==rec.id);saveCache();render();if(db)db.doc('tarefas/'+rec.id).delete().catch(()=>{});
+  toast('Registro removido');
 }
 $('#open').addEventListener('click',onList);$('#done').addEventListener('click',onList);
 $('#btnClear').onclick=()=>archive(rows.filter(r=>inView(r)&&r.feito).map(r=>r.id));
@@ -494,7 +518,7 @@ $('#editFrm').addEventListener('submit',e=>{
   const lista=$('#eLista').value,d={texto:t,lista,prio:$('#ePrio').checked,obs:$('#eObs').value.trim()};
   d.resp=lista==='equipe'?$('#eResp').value.trim():'';
   if(lista==='equipe'&&!d.resp){toast('Informe o responsável');return}
-  if(lista==='rotina'){d.per=$('#ePer').value;d.dia=$('#eDiaLbl').hidden?null:+$('#eDia').value;d.hora=$('#eHora').value||'';d.feito=false}
+  if(lista==='rotina'){d.per=$('#ePer').value;d.dia=$('#eDiaLbl').hidden?null:+$('#eDia').value;d.hora=$('#eHora').value||'';if(!editing.feito||editing.lista!=='rotina')d.feito=false}
   save(editing.id,d);$('#dlgEdit').close();
 });
 $('#eCancel').onclick=()=>$('#dlgEdit').close();
@@ -504,7 +528,7 @@ $('#eDel').onclick=()=>{$('#dlgEdit').close();remove([editing.id])};
 function buildText(){
   const l=LISTS.find(x=>x.k===cur);
   if(cur==='rotina'){
-    const it=rows.filter(r=>r.lista==='rotina').sort(sortRot);
+    const it=rows.filter(r=>r.lista==='rotina'&&!r.feito).sort(sortRot);
     const lines=['*Rotina* ('+fmtD(today())+')',''];
     it.forEach(r=>{const st=rotStatus(r);lines.push((st.ck?'✅ ':st.s==='late'?'⚠️ ':'⬜ ')+r.texto+' — '+perLabel(r)+(r.hora?' até '+r.hora:'')+(st.s==='late'?' — *'+st.label+'*':st.ck?'':' — '+st.label)+(r.obs?'\n   _Obs: '+r.obs.replace(/\n+/g,' / ')+'_':''))});
     return {text:lines.join('\n'),count:it.length};
