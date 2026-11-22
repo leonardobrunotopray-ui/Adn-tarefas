@@ -260,6 +260,8 @@ details.imp ul{margin:8px 0 0;padding-left:18px;font-size:.85rem;color:var(--mut
           <label class="field"><span class="label">Etapa atual</span><select id="f_etapa"></select></label>
           <label class="field"><span class="label">Entrou nessa etapa em</span><input id="f_entrada" type="date"></label>
           <label class="field"><span class="label">Insumo existe no cadastro?</span><select id="f_cad"><option value="">Não verificado</option><option value="sim">Sim</option><option value="nao">Não (pedir ao Orçamento criar)</option></select></label>
+          <label class="field"><span class="label">Pedido ao Orçamento em</span><input id="f_orcPed" type="date"></label>
+          <label class="field"><span class="label">Orçamento criou o insumo em</span><input id="f_orcOk" type="date"></label>
           <label class="field"><span class="label">Insumo existe na etapa?</span><select id="f_insumo"><option value="">Não verificado</option><option value="sim">Sim</option><option value="nao">Não (pedir alocação ao Controle)</option></select></label>
           <label class="field"><span class="label">Alocação pedida ao Controle</span><input id="f_alocPed" type="date"></label>
           <label class="field"><span class="label">Controle alocou em</span><input id="f_alocOk" type="date"></label>
@@ -386,6 +388,7 @@ const slaOf=k=>{const v=cfg.sla&&cfg.sla[k];return typeof v==='number'?v:STAGES[
 function status(d){
   if(d.arquivado||d.etapa==='liberado')return{cls:'done',chip:d.arquivado&&isCancel(d)?'late':'neutral',label:d.arquivado?(isCancel(d)?'Cancelado':'Arquivado'):'Liberado '+fmtD(d.entradas?.liberado)};
   let ref=d.entradas?.[d.etapa], sla=slaOf(d.etapa), what='';
+  if(d.etapa==='criar_insumo'&&d.orcPedido)ref=d.orcPedido;
   if(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk&&d.alocacaoSolicitada){ref=d.alocacaoSolicitada;sla=ALOC_SLA;what=' alocação'}
   const n=bdays(ref);
   if(n==null)return{cls:'',chip:'neutral',label:'sem data',n:0};
@@ -452,6 +455,7 @@ const resolveRep=(d,to)=>repAberta(d)&&to!=='rm'&&IDX[to]>IDX.rm?{reprovaResolvi
 function nextText(d){
   if(d.arquivado)return isCancel(d)?'Cancelado.':'Arquivado.';
   if(d.etapa==='rm'&&repAberta(d))return'RM reprovada pelo Controle: corrigir e subir a RM de novo no Mega.';
+  if(d.etapa==='criar_insumo')return'Aguardando o Orçamento criar o insumo no cadastro'+(d.orcPedido?' (pedido em '+fmtD(d.orcPedido)+').':'.');
   if(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk&&!d.alocacaoSolicitada)return'Insumo não existe na etapa: pedir ao Controle, por e-mail, que aloque o insumo na etapa do serviço.';
   if(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk)return'Aguardando o Controle alocar o insumo na etapa do serviço (e-mail enviado em '+fmtD(d.alocacaoSolicitada)+').';
   return txt(STAGES[IDX[d.etapa]].a);
@@ -489,7 +493,7 @@ function doAction(id,d){
   switch(id){
     case'adv':return move(d,nextKey(d));
     case'cad_sim':return move(d,'insumo',{insumoCadastro:d.insumoCadastro==='nao'?'nao':'sim'});
-    case'cad_nao':return move(d,'criar_insumo',{insumoCadastro:'nao'},'Insumo não existe no cadastro: pedido ao Orçamento para criar');
+    case'cad_nao':return move(d,'criar_insumo',{insumoCadastro:'nao',orcPedido:today()},'Insumo não existe no cadastro: pedido ao Orçamento para criar');
     case'orc_ok':return move(d,'insumo',{insumoCriado:today(),insumoExiste:'nao'},'Orçamento criou o insumo → Insumo na etapa (pedir alocação ao Controle)');
     case'insumo_sim':return move(d,'rm',{insumoExiste:'sim'},'Insumo já existe na etapa → Subir RM');
     case'insumo_nao':return write(d.id,{insumoExiste:'nao',alocacaoSolicitada:today(),log:logPlus(d,'Insumo não existe na etapa: e-mail ao Controle pedindo alocação')});
@@ -565,6 +569,7 @@ function render(){
       <ol class="steps" aria-label="Etapa ${i+1} de ${STAGES.length}">${steps}</ol>
       <div class="stage-row"><span class="stage-name"><span class="num">${pad(i+1)}/${STAGES.length}</span>${esc(STAGES[i].n)}</span><span class="chip ${s.chip}">${esc(s.label)}</span></div>
       ${tagsFor(d)}
+      ${d.insumoCriado&&IDX[d.etapa]>=IDX.insumo&&IDX[d.etapa]<=IDX.rm?`<p class="note" style="margin:0">Insumo criado pelo Orçamento em ${fmtD(d.insumoCriado)}${d.orcPedido?' (pedido em '+fmtD(d.orcPedido)+')':''}.</p>`:''}
       <p class="next">${esc(nextText(d))}</p>
       ${d.estouro==='sim'&&i<=IDX.aprov_gestao?'<p class="sub">Com estouro de insumo: precisa de coord. + gerente.</p>':''}
       ${repAberta(d)&&!d.arquivado?`<p class="sub bad">Reprovado pelo Controle em ${fmtD(d.motivoData)}: ${esc(d.motivo||'sem motivo informado')}</p>`:''}
@@ -583,7 +588,7 @@ function openDlg(d){
   v('#f_titulo',d?.titulo);v('#f_obra',d?.obra);v('#f_empreiteiro',d?.empreiteiro);v('#f_contrato',d?.contrato);
   v('#f_valor',d?.valor!=null?d.valor.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');
   v('#f_etapa',d?.etapa||'necessidade');v('#f_entrada',d?(d.entradas?.[d.etapa]||''):today());
-  v('#f_cad',d?.insumoCadastro);v('#f_insumo',d?.insumoExiste);v('#f_alocPed',d?.alocacaoSolicitada);v('#f_alocOk',d?.alocacaoOk);v('#f_estouro',d?.estouro);
+  v('#f_cad',d?.insumoCadastro);v('#f_orcPed',d?.orcPedido);v('#f_orcOk',d?.insumoCriado);v('#f_insumo',d?.insumoExiste);v('#f_alocPed',d?.alocacaoSolicitada);v('#f_alocOk',d?.alocacaoOk);v('#f_estouro',d?.estouro);
   v('#f_rm',d?.rm);v('#f_cot',d?.cotacao);v('#f_notas',d?.notas);v('#f_motivo',d?.motivo);v('#f_prazo',d?.prazo);v('#f_prio',d?.prioridade);
   $('#f_motivoLbl').textContent=d?.motivoTipo==='reprova'?'Motivo da reprova do Controle'+(d.motivoData?' ('+fmtD(d.motivoData)+')':''):d?.motivoTipo==='cancelamento'?'Motivo do cancelamento'+(d.motivoData?' ('+fmtD(d.motivoData)+')':''):'Motivo (reprova do Controle / cancelamento)';
   $('#histBox').hidden=!d;$('#btnDel').hidden=!d;$('#btnArch').hidden=!d;$('#btnCancel').hidden=!d||!!d.arquivado;
@@ -622,7 +627,7 @@ $('#frm').addEventListener('submit',async e=>{
   const g=id=>$(id).value.trim();
   const etapa=g('#f_etapa'), entrada=g('#f_entrada')||today();
   const base={entraves:[...dlgBlk],titulo:g('#f_titulo'),obra:g('#f_obra'),empreiteiro:g('#f_empreiteiro'),contrato:g('#f_contrato'),valor:parseMoney(g('#f_valor')),
-    etapa,insumoCadastro:g('#f_cad')||null,insumoExiste:g('#f_insumo')||null,alocacaoSolicitada:g('#f_alocPed')||null,alocacaoOk:g('#f_alocOk')||null,estouro:g('#f_estouro')||null,
+    etapa,insumoCadastro:g('#f_cad')||null,orcPedido:g('#f_orcPed')||null,insumoCriado:g('#f_orcOk')||null,insumoExiste:g('#f_insumo')||null,alocacaoSolicitada:g('#f_alocPed')||null,alocacaoOk:g('#f_alocOk')||null,estouro:g('#f_estouro')||null,
     rm:g('#f_rm'),cotacao:g('#f_cot'),notas:$('#f_notas').value,motivo:$('#f_motivo').value.trim(),prazo:g('#f_prazo')||null,prioridade:g('#f_prio')||null,atualizado:new Date().toISOString()};
   const btn=$('#btnSave');btn.disabled=true;
   try{
@@ -673,8 +678,8 @@ $('#cfgFrm').addEventListener('submit',async e=>{
 
 /* CSV */
 async function exportCsv(rows){
-  const head=['Descrição','Obra','Empreiteiro','Contrato','Valor','Etapa nº','Etapa','Entrou na etapa','Dias úteis na etapa','Prazo','Situação','Insumo no cadastro','Insumo existe','Estouro','RM','Cotação','Prazo final','Prioridade','Cadastrado','Arquivado','Reprova / cancelamento','Motivo','Entraves','Observações'];
-  const lines=rows.map(d=>{const s=status(d),i=IDX[d.etapa];return[d.titulo,d.obra,d.empreiteiro,d.contrato,d.valor!=null?String(d.valor).replace('.',','):'',i+1,STAGES[i].n,fmtD(d.entradas?.[d.etapa]),s.n??'',slaOf(d.etapa),s.late?'Atrasado':s.cls==='warn'?'No limite':s.cls==='done'?'Concluído':'No prazo',d.insumoCadastro||'',d.insumoExiste||'',d.estouro||'',d.rm,d.cotacao,d.prazo?fmtD(d.prazo):'',d.prioridade==='urgente'?'Urgente':'',fmtD(d.criado),d.arquivado?'sim':'',d.motivoTipo==='reprova'?'Reprovado pelo Controle '+fmtD(d.motivoData):d.motivoTipo==='cancelamento'?'Cancelado '+fmtD(d.motivoData):'',d.motivo||'',blk(d).join(' | '),d.notas]});
+  const head=['Descrição','Obra','Empreiteiro','Contrato','Valor','Etapa nº','Etapa','Entrou na etapa','Dias úteis na etapa','Prazo','Situação','Insumo no cadastro','Pedido ao Orçamento','Insumo criado em','Insumo existe','Estouro','RM','Cotação','Prazo final','Prioridade','Cadastrado','Arquivado','Reprova / cancelamento','Motivo','Entraves','Observações'];
+  const lines=rows.map(d=>{const s=status(d),i=IDX[d.etapa];return[d.titulo,d.obra,d.empreiteiro,d.contrato,d.valor!=null?String(d.valor).replace('.',','):'',i+1,STAGES[i].n,fmtD(d.entradas?.[d.etapa]),s.n??'',slaOf(d.etapa),s.late?'Atrasado':s.cls==='warn'?'No limite':s.cls==='done'?'Concluído':'No prazo',d.insumoCadastro||'',d.orcPedido?fmtD(d.orcPedido):'',d.insumoCriado?fmtD(d.insumoCriado):'',d.insumoExiste||'',d.estouro||'',d.rm,d.cotacao,d.prazo?fmtD(d.prazo):'',d.prioridade==='urgente'?'Urgente':'',fmtD(d.criado),d.arquivado?'sim':'',d.motivoTipo==='reprova'?'Reprovado pelo Controle '+fmtD(d.motivoData):d.motivoTipo==='cancelamento'?'Cancelado '+fmtD(d.motivoData):'',d.motivo||'',blk(d).join(' | '),d.notas]});
   const csv='﻿'+[head,...lines].map(r=>r.map(c=>{c=String(c??'');return/[;"\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c}).join(';')).join('\r\n');
   try{const dl=await claude.use('downloads');if(!dl){toast('Exportação indisponível nesta visualização.');return}
     await dl.save({filename:'aditivos-'+today()+'.csv',data:new Blob([csv],{type:'text/csv;charset=utf-8'})})}
