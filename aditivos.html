@@ -165,6 +165,31 @@ body.has-bulk .toast{bottom:calc(150px + env(safe-area-inset-bottom,0px))}
 @keyframes pulse{50%{opacity:.5}}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:.88rem;z-index:20}
 @media (prefers-reduced-motion:no-preference){.card{transition:border-color .2s}}
+/* Importação do Mega */
+.drop{border:2px dashed var(--line);border-radius:var(--r);padding:28px 16px;text-align:center;display:grid;gap:8px;justify-items:center;background:var(--surface-2);cursor:pointer}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop input{width:auto;max-width:100%}
+.maprow{display:grid;grid-template-columns:minmax(120px,1fr) minmax(0,1.5fr);gap:8px 12px;align-items:center}
+.maprow label{font-size:.88rem}
+.tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r)}
+.imp-table{width:100%;border-collapse:collapse;font-size:.85rem}
+.imp-table th,.imp-table td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+.imp-table tr:last-child td{border-bottom:0}
+.imp-table th{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:500;background:var(--surface-2)}
+.imp-table input[type=checkbox]{width:auto}
+.chg{display:block;overflow-wrap:anywhere}
+.chg s{color:var(--muted)}
+@media (max-width:560px){
+  .imp-table thead{display:none}
+  .imp-table tr{display:grid;grid-template-columns:24px 1fr;gap:4px 10px;padding:10px;border-bottom:1px solid var(--line)}
+  .imp-table tr:last-child{border-bottom:0}
+  .imp-table td{border:0;padding:0}
+  .imp-table td:first-child{grid-row:span 3}
+  .imp-table td:not(:first-child){grid-column:2}
+}
+.impsum{display:flex;flex-wrap:wrap;gap:6px}
+details.imp summary{cursor:pointer;color:var(--muted);font-size:.88rem}
+details.imp ul{margin:8px 0 0;padding-left:18px;font-size:.85rem;color:var(--muted)}
 </style>
 
 <div class="wrap">
@@ -174,6 +199,7 @@ body.has-bulk .toast{bottom:calc(150px + env(safe-area-inset-bottom,0px))}
       <p>Da necessidade até o saldo liberado para medição. Prazos contados em dias úteis (d.u.) desde a entrada em cada etapa.</p>
     </div>
     <div class="top-actions">
+      <button id="btnImp" type="button">Importar do Mega</button>
       <button id="btnCsv" type="button">Exportar CSV</button>
       <button id="btnCfg" type="button">Ajustes</button>
       <button id="btnNew" type="button" class="primary">+ Novo aditivo</button>
@@ -278,6 +304,14 @@ body.has-bulk .toast{bottom:calc(150px + env(safe-area-inset-bottom,0px))}
     </div>
     <div class="dlg-foot"><span class="spacer"></span><button type="button" data-close>Cancelar</button><button type="submit" class="primary">Salvar ajustes</button></div>
   </form>
+</dialog>
+
+<dialog id="imp">
+  <div class="dlg">
+    <div class="dlg-head"><h2 id="impTitle">Importar planilha do Mega</h2><button type="button" class="ghost" data-close>Fechar</button></div>
+    <div class="dlg-body" id="impBody"></div>
+    <div class="dlg-foot" id="impFoot"></div>
+  </div>
 </dialog>
 
 <script>
@@ -640,6 +674,205 @@ $('#bDel').onclick=async()=>{
 let toastT;
 function toast(m){let el=$('.toast');if(!el){el=document.createElement('div');el.className='toast';el.setAttribute('role','status');document.body.appendChild(el)}el.textContent=m;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>el.hidden=true,2600)}
 
+/* Importar planilha do Mega */
+const IMP_FIELDS=[
+ {k:'rm',n:'Nº da RM',key:1,pats:[/^(n|no|nr|num|numero|cod|codigo)?\s*(da )?rm$/,/\brm\b/,/requisi/]},
+ {k:'cotacao',n:'Nº da cotação',key:1,pats:[/^(n|no|nr|num|numero|cod|codigo)?\s*(da )?cotacao$/,/cotac/]},
+ {k:'contrato',n:'Nº do contrato',key:1,pats:[/^(n|no|nr|num|numero|cod|codigo)?\s*(do )?contrato$/,/contrato/]},
+ {k:'titulo',n:'Descrição',pats:[/^descricao$/,/objeto/,/descri/,/servico/,/historico/]},
+ {k:'obra',n:'Obra',pats:[/^obra$/,/empreendimento/,/\bobra\b/,/centro de custo/]},
+ {k:'empreiteiro',n:'Empreiteiro / fornecedor',pats:[/empreiteir/,/fornecedor/,/credor/,/razao social/,/agente/]},
+ {k:'valor',n:'Valor (R$)',pats:[/^(valor|vl|vlr) total$/,/^valor$/,/^total$/,/valor|vlr/]},
+ {k:'status',n:'Status / situação',pats:[/^status$/,/^situacao$/,/situacao|status/,/fase/]}
+];
+const IMP_LABEL={rm:'RM',cotacao:'cotação',contrato:'contrato',titulo:'descrição',obra:'obra',empreiteiro:'empreiteiro',valor:'valor',etapa:'etapa',arquivado:'arquivado'};
+let imp=null, impCfg={};
+const norm=s=>String(s??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+const keyOf=v=>{let s=String(v??'').trim();if(/^\d+\.0+$/.test(s))s=s.split('.')[0];return s.replace(/[^0-9a-z]/gi,'').toUpperCase().replace(/^0+(?=.)/,'')};
+const cellStr=v=>v instanceof Date?v.toLocaleDateString('pt-BR'):String(v??'').trim();
+const cellNum=v=>typeof v==='number'?v:parseMoney(v);
+let xlsxP=null;
+function loadXlsx(){return xlsxP||(xlsxP=new Promise((ok,ko)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=()=>ok(window.XLSX);s.onerror=()=>{xlsxP=null;s.remove();ko(new Error('xlsx'))};document.head.appendChild(s)}))}
+function decodeTxt(buf){try{return new TextDecoder('utf-8',{fatal:true}).decode(buf)}catch(e){return new TextDecoder('windows-1252').decode(buf)}}
+function parseCsv(t){
+  t=t.replace(/^﻿/,'');const first=t.split(/\r?\n/,1)[0];
+  const dl=[';','\t',','].sort((a,b)=>first.split(b).length-first.split(a).length)[0];
+  const out=[];let row=[],f='',q=false;
+  for(let i=0;i<t.length;i++){const c=t[i];
+    if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c==='"')q=true;
+    else if(c===dl){row.push(f);f=''}
+    else if(c==='\n'||c==='\r'){if(c==='\r'&&t[i+1]==='\n')i++;row.push(f);out.push(row);row=[];f=''}
+    else f+=c}
+  if(f||row.length){row.push(f);out.push(row)}
+  return out;
+}
+async function readSheet(file){
+  const buf=await file.arrayBuffer();
+  if(/\.(csv|txt)$/i.test(file.name))return parseCsv(decodeTxt(buf));
+  const X=await loadXlsx();const wb=X.read(buf,{type:'array',cellDates:true});
+  let best=[];for(const n of wb.SheetNames){const a=X.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:''});if(a.length>best.length)best=a}
+  return best;
+}
+function findHeader(aoa){
+  let bi=0,bs=-1;
+  for(let i=0;i<Math.min(25,aoa.length);i++){const h=aoa[i].map(norm).filter(Boolean);let sc=0;IMP_FIELDS.forEach(f=>{if(h.some(x=>f.pats.some(p=>p.test(x))))sc++});if(sc>bs){bs=sc;bi=i}}
+  return bi;
+}
+function guessMap(headers){
+  const nh=headers.map(norm), used=new Set(), m={};
+  IMP_FIELDS.forEach(f=>{const saved=impCfg.cols?.[f.k];const j=saved?headers.indexOf(saved):-1;if(j>=0&&!used.has(j)){m[f.k]=j;used.add(j)}});
+  for(let r=0;r<5;r++)IMP_FIELDS.forEach(f=>{if(m[f.k]!=null||!f.pats[r])return;const j=nh.findIndex((h,i)=>h&&!used.has(i)&&f.pats[r].test(h));if(j>=0){m[f.k]=j;used.add(j)}});
+  IMP_FIELDS.forEach(f=>{if(m[f.k]==null)m[f.k]=-1});
+  return m;
+}
+function guessStage(v){const s=norm(v);if(/cancel|reprov|recus|estorn/.test(s))return'__arq';return''}
+
+function openImp(){
+  if(!db){toast('Sem conexão com o armazenamento. Abra logado no claude.ai.');return}
+  imp={createNew:false};impStep1();$('#imp').showModal();
+}
+function impStep1(){
+  $('#impBody').innerHTML=`<label class="drop" id="impDrop"><strong>Escolha a planilha exportada do Mega</strong>
+    <span class="muted">Excel (.xlsx, .xls) ou CSV. Também dá para arrastar o arquivo até aqui.</span>
+    <input type="file" id="impFile" accept=".xlsx,.xls,.xlsm,.csv,.txt"></label>
+    <p class="note">Nada é gravado antes de você conferir. Os aditivos da planilha são ligados aos do painel pelo nº da RM, depois pelo nº da cotação e, por último, pelo nº do contrato. A etapa só avança, nunca volta.</p>`;
+  $('#impFoot').innerHTML='<span class="spacer"></span><button type="button" data-close>Cancelar</button>';
+  const dz=$('#impDrop');
+  $('#impFile').onchange=e=>{const f=e.target.files[0];if(f)impLoad(f)};
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over')});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+  dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');const f=e.dataTransfer.files[0];if(f)impLoad(f)});
+}
+async function impLoad(file){
+  $('#impBody').innerHTML='<p class="muted">Lendo '+esc(file.name)+'…</p>';
+  let aoa;
+  try{aoa=await readSheet(file)}catch(e){impStep1();toast(e.message==='xlsx'?'Não consegui carregar o leitor de Excel. Verifique a internet ou salve a planilha como CSV.':'Não consegui ler esse arquivo.');return}
+  const hi=findHeader(aoa), seen={};
+  const headers=(aoa[hi]||[]).map((h,i)=>{let n=cellStr(h)||'Coluna '+(i+1);if(seen[n]){seen[n]++;n+=' ('+seen[n]+')'}else seen[n]=1;return n});
+  const data=aoa.slice(hi+1).filter(r=>r.some(c=>cellStr(c)!==''));
+  if(!headers.length||!data.length){impStep1();toast('A planilha parece vazia.');return}
+  Object.assign(imp,{file:file.name,headers,data,map:guessMap(headers),stmap:{...(impCfg.status||{})}});
+  impStep2();
+}
+function impStep2(){
+  const opts=sel=>'<option value="-1">— não usar —</option>'+imp.headers.map((h,j)=>`<option value="${j}" ${j===sel?'selected':''}>${esc(h)}</option>`).join('');
+  $('#impBody').innerHTML=`<p class="muted" style="margin:0"><b>${esc(imp.file)}</b> · ${imp.data.length} linhas. Confira qual coluna da planilha corresponde a cada campo do painel. Os três primeiros são usados para encontrar o aditivo; marque pelo menos um.</p>
+    <div class="maprow">${IMP_FIELDS.map(f=>`<label for="im_${f.k}">${esc(f.n)}</label><select id="im_${f.k}">${opts(imp.map[f.k])}</select>`).join('')}</div>
+    <div id="stBox"></div>
+    <label class="check" style="white-space:normal"><input type="checkbox" id="imNew" ${imp.createNew?'checked':''}> Cadastrar como novos os aditivos da planilha que não existirem no painel</label>`;
+  $('#impFoot').innerHTML='<button type="button" id="impBack1">Outro arquivo</button><span class="spacer"></span><button type="button" class="primary" id="impGo">Conferir mudanças</button>';
+  IMP_FIELDS.forEach(f=>$('#im_'+f.k).onchange=()=>{readMap();if(f.k==='status')renderStBox()});
+  renderStBox();
+  $('#impBack1').onclick=impStep1;
+  $('#impGo').onclick=()=>{readMap();
+    if(imp.map.rm<0&&imp.map.cotacao<0&&imp.map.contrato<0){toast('Escolha a coluna da RM, da cotação ou do contrato.');return}
+    impStep3()};
+}
+function readMap(){
+  IMP_FIELDS.forEach(f=>{const el=$('#im_'+f.k);if(el)imp.map[f.k]=+el.value});
+  const n=$('#imNew');if(n)imp.createNew=n.checked;
+  document.querySelectorAll('[data-st]').forEach(s=>{imp.stmap[s.dataset.st]=s.value});
+}
+function renderStBox(){
+  const box=$('#stBox'), c=imp.map.status;
+  if(c<0){box.innerHTML='';return}
+  const vals=[...new Set(imp.data.map(r=>cellStr(r[c])).filter(Boolean))].slice(0,40);
+  if(!vals.length){box.innerHTML='';return}
+  const stOpts=v=>{const cur=imp.stmap[v]??guessStage(v);return`<option value="">Não mudar a etapa</option>${STAGES.map((s,i)=>`<option value="${s.k}" ${cur===s.k?'selected':''}>${pad(i+1)} · ${esc(s.n)}</option>`).join('')}<option value="__arq" ${cur==='__arq'?'selected':''}>Arquivar</option>`};
+  box.innerHTML=`<div class="field"><span class="label">Cada status do Mega leva para qual etapa?</span>
+    <div class="maprow">${vals.map((v,i)=>`<label for="st_${i}">${esc(v)}</label><select id="st_${i}" data-st="${esc(v)}">${stOpts(v)}</select>`).join('')}</div>
+    <span class="note">Fica salvo para as próximas importações. Um aditivo só avança: se no painel ele já estiver numa etapa mais à frente, a etapa é mantida.</span></div>`;
+}
+function buildPlan(){
+  const M=imp.map, get=(r,k)=>M[k]>=0?r[M[k]]:'';
+  const groups=new Map();let semChave=0;
+  for(const r of imp.data){
+    const rm=keyOf(get(r,'rm')),co=keyOf(get(r,'cotacao')),ct=keyOf(get(r,'contrato'));
+    const gk=rm?'rm:'+rm:co?'co:'+co:ct?'ct:'+ct:null;
+    if(!gk){semChave++;continue}
+    let g=groups.get(gk);if(!g){g={raw:{},valor:null,status:'',n:0};groups.set(gk,g)}
+    g.n++;
+    for(const k of ['rm','cotacao','contrato','titulo','obra','empreiteiro'])if(!g.raw[k]){const v=cellStr(get(r,k));if(v)g.raw[k]=v}
+    const v=M.valor>=0?cellNum(get(r,'valor')):null;if(v!=null)g.valor=Math.round(((g.valor||0)+v)*100)/100;
+    if(!g.status)g.status=cellStr(get(r,'status'));
+  }
+  const ix={rm:new Map(),cotacao:new Map(),contrato:new Map()};
+  rows.forEach(d=>Object.keys(ix).forEach(t=>{const k=keyOf(d[t]);if(k){if(!ix[t].has(k))ix[t].set(k,[]);ix[t].get(k).push(d)}}));
+  const pick=(t,k,ok=()=>true)=>{if(!k)return null;const l=(ix[t].get(k)||[]).filter(ok);const a=l.filter(d=>!d.arquivado),c=a.length?a:l;return c.length===1?c[0]:c.length>1?'amb':null};
+  const plan=[];
+  for(const g of groups.values()){
+    const rmK=keyOf(g.raw.rm),coK=keyOf(g.raw.cotacao),ctK=keyOf(g.raw.contrato);
+    const fits=d=>(!rmK||!keyOf(d.rm)||keyOf(d.rm)===rmK)&&(!coK||!keyOf(d.cotacao)||keyOf(d.cotacao)===coK);
+    let d=pick('rm',rmK);
+    if(!d)d=pick('cotacao',coK,fits);
+    if(!d)d=pick('contrato',ctK,fits);
+    const id=[g.raw.rm&&'RM '+g.raw.rm,g.raw.cotacao&&'Cot. '+g.raw.cotacao,g.raw.contrato&&'CT '+g.raw.contrato].filter(Boolean).join(' · ');
+    const st=imp.stmap[g.status]??guessStage(g.status);
+    if(d==='amb'){plan.push({type:'amb',id,g});continue}
+    if(!d){
+      if(!imp.createNew||st==='__arq'){plan.push({type:'none',id,g});continue}
+      const etapa=STAGES[IDX[st]]?st:coK?'cotacao':rmK?'aprov_controle':'necessidade';
+      const doc={titulo:g.raw.titulo||id,obra:g.raw.obra||'',empreiteiro:g.raw.empreiteiro||'',contrato:g.raw.contrato||'',valor:g.valor,etapa,
+        insumoExiste:null,alocacaoSolicitada:null,alocacaoOk:null,estouro:null,rm:g.raw.rm||'',cotacao:g.raw.cotacao||'',notas:'',
+        entradas:{[etapa]:today()},criado:today(),arquivado:false,atualizado:new Date().toISOString(),
+        log:[{t:today(),msg:'Cadastrado pela planilha do Mega ('+imp.file+') na etapa '+STAGES[IDX[etapa]].n}]};
+      plan.push({type:'new',id,g,doc,ch:[{k:'etapa',to:etapa},...(g.valor!=null?[{k:'valor',to:g.valor}]:[])]});continue;
+    }
+    const patch={},ch=[];
+    const put=(k,to)=>{patch[k]=to;ch.push({k,from:d[k],to})};
+    for(const k of ['rm','cotacao','contrato'])if(g.raw[k]&&keyOf(d[k])!==keyOf(g.raw[k]))put(k,g.raw[k]);
+    for(const k of ['titulo','obra','empreiteiro'])if(g.raw[k]&&!String(d[k]||'').trim())put(k,g.raw[k]);
+    if(g.valor!=null&&(typeof d.valor!=='number'||Math.abs(d.valor-g.valor)>0.005))put('valor',g.valor);
+    if(st==='__arq'){if(!d.arquivado)put('arquivado',true)}
+    else if(st&&!d.arquivado&&IDX[st]>IDX[d.etapa]){put('etapa',st);patch.entradas={[st]:today()}}
+    plan.push({type:ch.length?'upd':'same',id,g,d,patch,ch});
+  }
+  return{plan,semChave};
+}
+const fmtImp=(k,v)=>v==null||v===''?'vazio':k==='valor'?brl(v):k==='etapa'?STAGES[IDX[v]]?.n||v:k==='arquivado'?(v?'sim':'não'):String(v);
+function impStep3(){
+  const {plan,semChave}=buildPlan();imp.plan=plan;
+  const c=t=>plan.filter(p=>p.type===t);
+  const upd=c('upd'),nov=c('new'),same=c('same'),none=c('none'),amb=c('amb');
+  const act=plan.map((p,i)=>({p,i})).filter(x=>x.p.type==='upd'||x.p.type==='new');
+  const chip=(n,t,cls)=>n?`<span class="chip ${cls}">${n} ${t}</span>`:'';
+  const tr=({p,i})=>`<tr><td><input type="checkbox" id="ip_${i}" checked aria-label="Aplicar ${esc(p.id)}"></td>
+    <td class="mono">${esc(p.id)}${p.g.n>1?`<div class="muted" style="font-size:.75rem">${p.g.n} linhas somadas</div>`:''}</td>
+    <td>${p.type==='new'?'<span class="chip ok">novo</span> ':''}${esc(p.type==='new'?p.doc.titulo:p.d.titulo||'(sem descrição)')}${p.type==='upd'&&p.d.obra?`<div class="muted" style="font-size:.78rem">${esc(p.d.obra)}</div>`:''}</td>
+    <td>${p.ch.map(x=>`<span class="chg">${esc(IMP_LABEL[x.k])}: ${p.type==='upd'?`<s>${esc(fmtImp(x.k,x.from))}</s> → `:''}<b>${esc(fmtImp(x.k,x.to))}</b></span>`).join('')}</td></tr>`;
+  const lst=(arr,title,why)=>arr.length?`<details class="imp"><summary>${arr.length} ${title}</summary><ul>${arr.slice(0,100).map(p=>`<li><span class="mono">${esc(p.id)}</span>${p.g.raw.titulo?' · '+esc(p.g.raw.titulo):''}</li>`).join('')}</ul><p class="note">${why}</p></details>`:'';
+  $('#impBody').innerHTML=`<div class="impsum">${chip(upd.length,'com mudanças','warn')}${chip(nov.length,'novos','ok')}${chip(same.length,'já em dia','neutral')}${chip(none.length,'não encontrados','neutral')}${chip(amb.length,'ambíguos','late')}</div>
+    ${act.length?`<div class="tblwrap"><table class="imp-table"><thead><tr><th><input type="checkbox" id="ipAll" checked aria-label="Marcar todos"></th><th>Mega</th><th>Aditivo</th><th>O que muda</th></tr></thead><tbody>${act.map(tr).join('')}</tbody></table></div>`
+      :'<div class="empty"><strong>Nada para atualizar</strong>Os aditivos encontrados já estão iguais à planilha.</div>'}
+    ${lst(none,'não encontrados no painel',imp.createNew?'Estes estão como cancelados/arquivados no Mega e não foram cadastrados.':'Volte e marque “Cadastrar como novos” para incluí-los, ou cadastre manualmente.')}
+    ${lst(amb,'ambíguos (mais de um aditivo com o mesmo número)','Ajuste manualmente: há mais de um aditivo no painel com essa RM, cotação ou contrato.')}
+    ${semChave?`<p class="note">${semChave} linhas sem RM, cotação ou contrato foram ignoradas.</p>`:''}`;
+  $('#impFoot').innerHTML=`<button type="button" id="impBack2">Voltar às colunas</button><span class="spacer"></span><button type="button" data-close>Cancelar</button>${act.length?'<button type="button" class="primary" id="impApply"></button>':''}`;
+  $('#impBack2').onclick=impStep2;
+  if(!act.length)return;
+  const boxes=()=>act.map(x=>$('#ip_'+x.i));
+  const cnt=()=>{const n=boxes().filter(b=>b.checked).length;$('#impApply').textContent=n===1?'Aplicar 1 mudança':'Aplicar '+n+' mudanças';$('#impApply').disabled=!n;$('#ipAll').checked=n===act.length};
+  boxes().forEach(b=>b.onchange=cnt);
+  $('#ipAll').onchange=e=>{boxes().forEach(b=>b.checked=e.target.checked);cnt()};
+  cnt();
+  $('#impApply').onclick=impApply;
+}
+async function impApply(){
+  const chosen=imp.plan.filter((p,i)=>(p.type==='upd'||p.type==='new')&&$('#ip_'+i)?.checked);
+  if(!chosen.length)return;
+  const b=$('#impApply');b.disabled=true;b.textContent='Gravando…';
+  const r=await Promise.allSettled(chosen.map(p=>p.type==='new'?db.collection('aditivos').add(p.doc):
+    db.doc('aditivos/'+p.d.id).update({...p.patch,atualizado:new Date().toISOString(),
+      log:logPlus(p.d,'Atualizado pela planilha do Mega: '+p.ch.map(x=>x.k==='etapa'?'etapa → '+STAGES[IDX[x.to]].n:x.k==='arquivado'?'arquivado':IMP_LABEL[x.k]+' '+fmtImp(x.k,x.to)).join(', '))})));
+  const cols={};IMP_FIELDS.forEach(f=>{if(imp.map[f.k]>=0)cols[f.k]=imp.headers[imp.map[f.k]]});
+  try{await db.doc('config/importMega').set({cols,status:imp.stmap})}catch(e){}
+  const fail=r.filter(x=>x.status==='rejected').length;
+  if(fail){toast(`${chosen.length-fail} gravados, ${fail} falharam. Importe de novo para tentar os que faltaram.`);b.disabled=false;b.textContent='Tentar de novo';return}
+  $('#imp').close();toast(chosen.length===1?'1 aditivo atualizado pelo Mega':chosen.length+' aditivos atualizados pelo Mega');
+}
+$('#btnImp').onclick=openImp;
+
 /* Dados */
 const CACHE_KEY='aditivos-cache-v1';
 function setSync(state,msg){const el=$('#sync');el.dataset.state=state;el.textContent=msg}
@@ -654,6 +887,7 @@ render();
   try{db=window.claude?await claude.use('db'):null}catch(e){db=null}
   if(!db){clearTimeout(timer);loaded=true;setSync('slow',fromLocal?'Sem conexão: mostrando a última cópia salva (só leitura)':'Sem conexão com os dados');render();return}
   db.doc('config/geral').onSnapshot(s=>{if(s.metadata.fromCache&&!s.exists)return;cfg=s.exists?{setor:'',sla:{},...s.data()}:{setor:'',sla:{}};if(!s.metadata.fromCache)saveCache();render()},()=>{});
+  db.doc('config/importMega').onSnapshot(s=>{if(s.exists)impCfg=s.data()||{}},()=>{});
   db.collection('aditivos').onSnapshot(s=>{
     if(s.metadata.fromCache&&s.empty&&rows.length)return;
     rows=s.docs.map(x=>({id:x.id,...x.data()})).filter(d=>IDX[d.etapa]!=null);
