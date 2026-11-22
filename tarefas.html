@@ -7,7 +7,7 @@
 :root{
   --bg:#f1f3f0; --surface:#ffffff; --surface-2:#e8ece7; --ink:#1a211c; --muted:#5d6960; --line:#d3d9d2;
   --accent:#2d6a4f; --accent-soft:#dcebe2; --accent-ink:#ffffff;
-  --prio:#b5560f; --prio-soft:#fbe9d9; --done:#8a958c; --bad:#b3322a;
+  --prio:#b5560f; --prio-soft:#fbe9d9; --bad-soft:#f8e1de; --done:#8a958c; --bad:#b3322a;
   --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-head:"Barlow Semi Condensed","Barlow",system-ui,sans-serif;
   --r:10px;
@@ -15,11 +15,11 @@
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#111613; --surface:#19201b; --surface-2:#222b25; --ink:#e6ece7; --muted:#97a39a; --line:#2e3931;
   --accent:#6cc497; --accent-soft:#1d3428; --accent-ink:#0c1610;
-  --prio:#f0a15a; --prio-soft:#3a2614; --done:#6b766d; --bad:#ef7b72; color-scheme:dark}}
+  --prio:#f0a15a; --prio-soft:#3a2614; --bad-soft:#3b1c19; --done:#6b766d; --bad:#ef7b72; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#111613; --surface:#19201b; --surface-2:#222b25; --ink:#e6ece7; --muted:#97a39a; --line:#2e3931;
   --accent:#6cc497; --accent-soft:#1d3428; --accent-ink:#0c1610;
-  --prio:#f0a15a; --prio-soft:#3a2614; --done:#6b766d; --bad:#ef7b72; color-scheme:dark}
+  --prio:#f0a15a; --prio-soft:#3a2614; --bad-soft:#3b1c19; --done:#6b766d; --bad:#ef7b72; color-scheme:dark}
 
 *{box-sizing:border-box}
 html,body{background:var(--bg)}
@@ -45,6 +45,16 @@ h1{font-size:1.35rem;font-weight:700;letter-spacing:-.01em;flex:1;min-width:0}
 .tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
 .cnt{font-family:var(--f-body);font-size:.75rem;font-weight:600;min-width:20px;padding:1px 6px;border-radius:999px;background:var(--surface-2);color:var(--muted);font-variant-numeric:tabular-nums;text-align:center}
 .cnt.hot{background:var(--prio-soft);color:var(--prio)}
+.cnt.late{background:var(--bad);color:var(--surface)}
+.tag.st{text-transform:none;letter-spacing:0;font-size:.8rem}
+.tag.st.late{background:var(--bad);color:var(--surface)}
+.tag.st.today{background:var(--prio-soft);color:var(--prio)}
+.tag.st.ok{background:var(--accent-soft);color:var(--accent)}
+.tag.st.next{background:var(--surface-2);color:var(--muted)}
+.item.late{background:linear-gradient(90deg,var(--bad-soft),transparent 75%)}
+.item.late .box{border-color:var(--bad)}
+.rot-row{display:flex;gap:8px;flex-wrap:wrap}
+.rot-row select,.rot-row input{flex:1 1 120px;min-width:0}
 
 main{padding-block:14px 120px;display:grid;gap:14px}
 
@@ -154,6 +164,11 @@ dialog::backdrop{background:rgba(10,15,12,.5)}
       <input type="text" id="addResp" class="field" list="respList" placeholder="Responsável (nome)" aria-label="Responsável">
       <datalist id="respList"></datalist>
     </div>
+    <div class="rot-row" id="rotRow" hidden>
+      <select id="addPer" class="field" aria-label="Frequência"></select>
+      <select id="addDia" class="field" aria-label="Dia" hidden></select>
+      <input type="time" id="addHora" class="field" aria-label="Até que horas (opcional)" title="Até que horas (opcional)">
+    </div>
     <button class="btn pri" type="submit">Adicionar</button>
   </form>
 
@@ -184,6 +199,11 @@ dialog::backdrop{background:rgba(10,15,12,.5)}
     <label>Tarefa<textarea id="eTxt" required></textarea></label>
     <label>Observação<textarea id="eObs" placeholder="Detalhes, contato, local, o que falta…" style="min-height:70px"></textarea></label>
     <label>Lista<select id="eLista"></select></label>
+    <div id="eRotLbl" class="rot-row" style="font-size:.85rem;color:var(--muted)">
+      <label style="flex:1 1 120px">Frequência<select id="ePer"></select></label>
+      <label style="flex:1 1 100px" id="eDiaLbl">Dia<select id="eDia"></select></label>
+      <label style="flex:1 1 100px">Até que horas<input type="time" id="eHora"></label>
+    </div>
     <label id="eRespLbl">Responsável<input id="eResp" list="respList" placeholder="Nome"></label>
     <label style="display:flex;gap:8px;align-items:center;color:var(--ink);font-size:1rem"><input type="checkbox" id="ePrio" style="width:20px;height:20px"> Prioridade</label>
     <div class="row">
@@ -226,6 +246,7 @@ dialog::backdrop{background:rgba(10,15,12,.5)}
 
 <script>
 const LISTS=[
+  {k:'rotina',n:'Rotina',t:'Rotina'},
   {k:'campo',n:'Campo',t:'Tarefas de campo'},
   {k:'escritorio',n:'Escritório',t:'Tarefas de escritório'},
   {k:'restricoes',n:'Restrições',t:'Restrições'},
@@ -234,7 +255,8 @@ const LISTS=[
 ];
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const today=()=>new Date().toISOString().slice(0,10);
+const ds=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const today=()=>ds(new Date());
 const fmtD=d=>d?d.slice(8,10)+'/'+d.slice(5,7):'';
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const ICON_CK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
@@ -243,23 +265,69 @@ const ICON_NOTE='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stro
 const ICON_ST_O='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6L2.5 9.4l6.6-.8z"/></svg>';
 
 let rows=[],db=null,loaded=false,editing=null,addPrio=false;
-let cur='campo',resp='';
-try{cur=localStorage.getItem('lo-tab')||'campo';if(!LISTS.some(l=>l.k===cur))cur='campo'}catch(e){}
+let cur='rotina',resp='';
+try{cur=localStorage.getItem('lo-tab')||'rotina';if(!LISTS.some(l=>l.k===cur))cur='rotina'}catch(e){}
 
 function sortOpen(a,b){return (b.prio?1:0)-(a.prio?1:0)||(a.criadoTs||0)-(b.criadoTs||0)}
 function sortDone(a,b){return (b.concluidoTs||0)-(a.concluidoTs||0)}
 function respNames(){return [...new Set(rows.filter(r=>r.lista==='equipe'&&r.resp).map(r=>r.resp.trim()))].sort((a,b)=>a.localeCompare(b,'pt-BR'))}
 function inView(r){return r.lista===cur&&(cur!=='equipe'||!resp||(r.resp||'').trim()===resp)}
 
+/* Rotina: cada tarefa tem prazos que se repetem; marcar vale para o prazo atual */
+const DOW=['dom','seg','ter','qua','qui','sex','sáb'];
+const PERS=[['diaria','Diária'],['uteis','Dias úteis (seg a sex)'],['semanal','Semanal'],['mensal','Mensal']];
+const pd=x=>{const [y,m,d]=x.split('-').map(Number);return new Date(y,m-1,d)};
+const addD=(x,n)=>{const d=pd(x);d.setDate(d.getDate()+n);return ds(d)};
+const nowHM=()=>{const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
+function isDl(r,x){const d=pd(x),w=d.getDay();
+  if(r.per==='uteis')return w>0&&w<6;
+  if(r.per==='semanal')return w===+(r.dia??1);
+  if(r.per==='mensal'){const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();return d.getDate()===Math.min(+(r.dia||1),last)}
+  return true}
+function prevDl(r,x){for(let i=1;i<=62;i++){const y=addD(x,-i);if(isDl(r,y))return y}return null}
+function nextDl(r,x){for(let i=1;i<=62;i++){const y=addD(x,i);if(isDl(r,y))return y}return null}
+function dayName(x){if(!x)return'';const t=today();if(x===t)return'hoje';if(x===addD(t,1))return'amanhã';if(x===addD(t,-1))return'ontem';return DOW[pd(x).getDay()]+' '+fmtD(x)}
+function perLabel(r){if(r.per==='uteis')return'Dias úteis';if(r.per==='semanal')return'Semanal · '+DOW[+(r.dia??1)];if(r.per==='mensal')return'Mensal · dia '+(r.dia||1);return'Diária'}
+function firstMiss(r,u,c){const st=u&&u>=c?u:addD(c,-1);return nextDl(r,st)}
+function rotStatus(r){
+  const t=today(),u=r.ultima||'',c=r.criado||t,h=r.hora||'';
+  const D0=isDl(r,t)?t:prevDl(r,t);
+  if(D0===t){
+    const P=prevDl(r,t);
+    if(u&&(!P||u>P))return{ck:true,s:'ok',label:u===t?'Feita hoje':'Feita '+dayName(u),rank:4};
+    if(P&&P>=c&&!(u&&u>(prevDl(r,P)||'')))return{s:'late',label:'Atrasada desde '+dayName(firstMiss(r,u,c)),rank:0};
+    if(h&&nowHM()>h)return{s:'late',label:'Atrasada · era até '+h,rank:0};
+    return{s:'today',label:'Para hoje'+(h?' até '+h:''),rank:1};
+  }
+  const N=nextDl(r,t);
+  if(u&&D0&&u>D0)return{ck:true,s:'ok',label:'Feita '+dayName(u)+' · próxima '+dayName(N),rank:4};
+  if(D0&&D0>=c&&!(u&&u>(prevDl(r,D0)||''))){const f=firstMiss(r,u,c),n=Math.round((pd(t)-pd(f))/864e5);return{s:'late',label:'Atrasada desde '+dayName(f)+' ('+n+(n===1?' dia':' dias')+')',rank:0}}
+  return{s:'next',label:'Próxima: '+dayName(N)+(h?' até '+h:''),rank:2};
+}
+function sortRot(a,b){const x=rotStatus(a),y=rotStatus(b);return x.rank-y.rank||(b.prio?1:0)-(a.prio?1:0)||(a.hora||'99').localeCompare(b.hora||'99')||(a.criadoTs||0)-(b.criadoTs||0)}
+function fillPer(sel){sel.innerHTML=PERS.map(([k,n])=>`<option value="${k}">${n}</option>`).join('')}
+function fillDia(sel,per,val){
+  if(per==='semanal')sel.innerHTML=[1,2,3,4,5,6,0].map(w=>`<option value="${w}">${['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][w]}</option>`).join('');
+  else if(per==='mensal')sel.innerHTML=Array.from({length:31},(_,i)=>`<option value="${i+1}">Dia ${i+1}</option>`).join('');
+  else sel.innerHTML='';
+  if(val!=null&&val!=='')sel.value=String(val);
+}
+fillPer($('#addPer'));fillPer($('#ePer'));
+$('#addPer').onchange=()=>{const p=$('#addPer').value;fillDia($('#addDia'),p,p==='semanal'?new Date().getDay():p==='mensal'?new Date().getDate():null);$('#addDia').hidden=!(p==='semanal'||p==='mensal')};
+$('#ePer').onchange=()=>{const p=$('#ePer').value;fillDia($('#eDia'),p,p==='semanal'?1:p==='mensal'?1:null);$('#eDiaLbl').hidden=!(p==='semanal'||p==='mensal')};
+
 function render(){
   // Abas
   $('#tabs').innerHTML=LISTS.map(l=>{
-    const open=rows.filter(r=>r.lista===l.k&&!r.feito);
-    const hot=open.some(r=>r.prio);
-    return `<button class="tab" role="tab" data-k="${l.k}" aria-selected="${l.k===cur}">${l.n}<span class="cnt${hot?' hot':''}">${open.length}</span></button>`;
+    let open,cls='';
+    if(l.k==='rotina'){const st=rows.filter(r=>r.lista==='rotina').map(rotStatus);open=st.filter(x=>x.rank<2);if(st.some(x=>x.s==='late'))cls=' late'}
+    else{open=rows.filter(r=>r.lista===l.k&&!r.feito);if(open.some(r=>r.prio))cls=' hot'}
+    return `<button class="tab" role="tab" data-k="${l.k}" aria-selected="${l.k===cur}">${l.n}<span class="cnt${cls}">${open.length}</span></button>`;
   }).join('');
   const isEq=cur==='equipe';
   $('#respRow').hidden=!isEq;
+  $('#rotRow').hidden=cur!=='rotina';
+  $('#btnArq').parentNode.hidden=cur==='rotina';
   $('#addTxt').placeholder='Anotar em '+LISTS.find(l=>l.k===cur).n+'…';
   // Responsáveis
   const names=respNames();
@@ -274,25 +342,28 @@ function render(){
   $('#btnCopy').lastChild.textContent=isEq&&resp?' Copiar tarefas de '+resp.split(' ')[0]:' Copiar para WhatsApp';
   // Itens
   const v=rows.filter(inView);
-  const open=v.filter(r=>!r.feito).sort(sortOpen);
+  const open=v.filter(r=>!r.feito).sort(cur==='rotina'?sortRot:sortOpen);
   const done=v.filter(r=>r.feito).sort(sortDone);
   $('#open').innerHTML=open.length?open.map(item).join(''):
     (!loaded?'<li class="empty">Carregando suas listas…</li>':
-    `<li class="empty"><b>${done.length?'Tudo feito por aqui':'Nada anotado ainda'}</b>Escreva no campo acima e toque em Adicionar. Toque na estrela para colocar no topo.</li>`);
+    (cur==='rotina'?`<li class="empty"><b>Nenhuma rotina ainda</b>Escreva a tarefa, escolha se é diária, semanal ou mensal e, se quiser, até que horas. Ela volta sozinha a cada período e avisa quando atrasar.</li>`:
+    `<li class="empty"><b>${done.length?'Tudo feito por aqui':'Nada anotado ainda'}</b>Escreva no campo acima e toque em Adicionar. Toque na estrela para colocar no topo.</li>`));
   $('#doneWrap').hidden=!done.length;
   $('#doneTitle').textContent='Concluídas ('+done.length+')';
   $('#done').innerHTML=done.map(item).join('');
 }
 function item(r){
+  const rot=r.lista==='rotina',st=rot?rotStatus(r):null,fe=rot?!!st.ck:!!fe;
   const meta=[];
-  if(r.prio&&!r.feito)meta.push('<span class="tag p">Prioridade</span>');
+  if(r.prio&&!fe)meta.push('<span class="tag p">Prioridade</span>');
   if(r.lista==='equipe'&&r.resp)meta.push(`<span class="tag r">${esc(r.resp)}</span>`);
-  meta.push(r.feito?'feito '+fmtD(r.concluido):'anotado '+fmtD(r.criado));
-  return `<li class="item${r.prio&&!r.feito?' prio':''}${r.feito?' done':''}" data-id="${r.id}">
-    <button class="ck" data-act="ck" aria-label="${r.feito?'Desmarcar':'Marcar como feito'}"><span class="box">${ICON_CK}</span></button>
+  if(rot){meta.push(`<span class="tag st ${st.s}">${esc(st.label)}</span>`);meta.push(esc(perLabel(r)))}
+  else meta.push(fe?'feito '+fmtD(r.concluido):'anotado '+fmtD(r.criado));
+  return `<li class="item${r.prio&&!fe?' prio':''}${fe?' done':''}${rot&&st.s==='late'?' late':''}" data-id="${r.id}">
+    <button class="ck" data-act="ck" aria-label="${fe?'Desmarcar':'Marcar como feito'}"><span class="box">${ICON_CK}</span></button>
     <button class="body" data-act="edit" aria-label="Editar"><span class="txt">${esc(r.texto)}</span>${r.obs?`<span class="obs">${esc(r.obs)}</span>`:''}<span class="meta">${meta.join('')}</span></button>
     <button class="note${r.obs?' has':''}" data-act="note" aria-label="${r.obs?'Editar observação':'Adicionar observação'}" title="Observação">${ICON_NOTE}</button>
-    ${r.feito?'':`<button class="star" data-act="prio" aria-label="${r.prio?'Tirar prioridade':'Marcar prioridade'}" aria-pressed="${!!r.prio}">${r.prio?ICON_ST:ICON_ST_O}</button>`}
+    ${fe?'':`<button class="star" data-act="prio" aria-label="${r.prio?'Tirar prioridade':'Marcar prioridade'}" aria-pressed="${!!r.prio}">${r.prio?ICON_ST:ICON_ST_O}</button>`}
   </li>`;
 }
 
@@ -321,6 +392,7 @@ $('#addFrm').addEventListener('submit',e=>{
   e.preventDefault();
   const t=$('#addTxt').value.trim();if(!t){$('#addTxt').focus();return}
   const d={lista:cur,texto:t,prio:addPrio,feito:false,criado:today(),criadoTs:Date.now()};
+  if(cur==='rotina'){d.per=$('#addPer').value;d.dia=$('#addDia').hidden?null:+$('#addDia').value;d.hora=$('#addHora').value||''}
   if(cur==='equipe'){const r=$('#addResp').value.trim();if(!r){toast('Informe o responsável');$('#addResp').focus();return}d.resp=r}
   save(uid(),d);
   $('#addTxt').value='';addPrio=false;$('#addPrio').setAttribute('aria-pressed','false');$('#addTxt').focus();
@@ -328,7 +400,8 @@ $('#addFrm').addEventListener('submit',e=>{
 function onList(e){
   const b=e.target.closest('[data-act]');if(!b)return;
   const r=rows.find(x=>x.id===b.closest('.item').dataset.id);if(!r)return;
-  if(b.dataset.act==='ck')save(r.id,r.feito?{feito:false,concluido:null,concluidoTs:null}:{feito:true,concluido:today(),concluidoTs:Date.now()});
+  if(b.dataset.act==='ck'&&r.lista==='rotina'){if(rotStatus(r).ck)save(r.id,{ultima:r.anterior||null,anterior:null});else{save(r.id,{anterior:r.ultima||null,ultima:today(),ultimaTs:Date.now()});toast('Rotina feita: '+(rotStatus({...r,ultima:today()}).label))}}
+  else if(b.dataset.act==='ck')save(r.id,r.feito?{feito:false,concluido:null,concluidoTs:null}:{feito:true,concluido:today(),concluidoTs:Date.now()});
   else if(b.dataset.act==='prio')save(r.id,{prio:!r.prio});
   else openEdit(r,b.dataset.act==='note');
 }
@@ -403,13 +476,15 @@ $('#aDown').onclick=async()=>{
 (async()=>{for(let i=0;i<30&&!window.claude;i++)await new Promise(r=>setTimeout(r,100));try{dl=window.claude?await claude.use('downloads'):null}catch(e){dl=null}if($('#dlgArq').open)renderArq()})();
 
 $('#eLista').innerHTML=LISTS.map(l=>`<option value="${l.k}">${l.t}</option>`).join('');
-$('#eLista').onchange=()=>$('#eRespLbl').hidden=$('#eLista').value!=='equipe';
+$('#eLista').onchange=()=>{$('#eRespLbl').hidden=$('#eLista').value!=='equipe';$('#eRotLbl').hidden=$('#eLista').value!=='rotina'};
 function openEdit(r,focusObs){
   editing=r;
   $('#eObs').value=r.obs||'';
   $('#dlgEdit').querySelector('h2').textContent=focusObs?'Observação':'Editar tarefa';
   $('#eTxt').value=r.texto;$('#eLista').value=r.lista;$('#eResp').value=r.resp||'';$('#ePrio').checked=!!r.prio;
   $('#eRespLbl').hidden=r.lista!=='equipe';
+  $('#eRotLbl').hidden=r.lista!=='rotina';
+  $('#ePer').value=r.per||'diaria';fillDia($('#eDia'),$('#ePer').value,r.dia??1);$('#eDiaLbl').hidden=!(r.per==='semanal'||r.per==='mensal');$('#eHora').value=r.hora||'';
   $('#dlgEdit').showModal();
   if(focusObs){const o=$('#eObs');o.focus();o.setSelectionRange(o.value.length,o.value.length)}
 }
@@ -419,6 +494,7 @@ $('#editFrm').addEventListener('submit',e=>{
   const lista=$('#eLista').value,d={texto:t,lista,prio:$('#ePrio').checked,obs:$('#eObs').value.trim()};
   d.resp=lista==='equipe'?$('#eResp').value.trim():'';
   if(lista==='equipe'&&!d.resp){toast('Informe o responsável');return}
+  if(lista==='rotina'){d.per=$('#ePer').value;d.dia=$('#eDiaLbl').hidden?null:+$('#eDia').value;d.hora=$('#eHora').value||'';d.feito=false}
   save(editing.id,d);$('#dlgEdit').close();
 });
 $('#eCancel').onclick=()=>$('#dlgEdit').close();
@@ -427,6 +503,12 @@ $('#eDel').onclick=()=>{$('#dlgEdit').close();remove([editing.id])};
 /* Copiar para WhatsApp */
 function buildText(){
   const l=LISTS.find(x=>x.k===cur);
+  if(cur==='rotina'){
+    const it=rows.filter(r=>r.lista==='rotina').sort(sortRot);
+    const lines=['*Rotina* ('+fmtD(today())+')',''];
+    it.forEach(r=>{const st=rotStatus(r);lines.push((st.ck?'✅ ':st.s==='late'?'⚠️ ':'⬜ ')+r.texto+' — '+perLabel(r)+(r.hora?' até '+r.hora:'')+(st.s==='late'?' — *'+st.label+'*':st.ck?'':' — '+st.label)+(r.obs?'\n   _Obs: '+r.obs.replace(/\n+/g,' / ')+'_':''))});
+    return {text:lines.join('\n'),count:it.length};
+  }
   const open=rows.filter(r=>inView(r)&&!r.feito).sort(sortOpen);
   let title=l.t;
   if(cur==='equipe'&&resp)title='Tarefas — '+resp;
@@ -467,6 +549,8 @@ let fromLocal=false;
 try{const c=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');if(Array.isArray(c)){rows=c;loaded=true;fromLocal=true}}catch(e){}
 setSync('busy',fromLocal?'Atualizando…':'Carregando…');
 render();
+setInterval(()=>{if(!document.hidden)render()},60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)render()});
 (async()=>{
   const timer=setTimeout(()=>{setSync('slow',fromLocal?'Sem sinal: última cópia':'Conexão lenta…');if(!loaded){loaded=true;render()}},10000);
   for(let i=0;i<30&&!window.claude;i++)await new Promise(r=>setTimeout(r,100));
