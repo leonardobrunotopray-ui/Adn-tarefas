@@ -203,6 +203,9 @@ dialog::backdrop{background:rgba(10,15,12,.5)}
     <div class="row">
       <button type="button" class="btn del" id="aDel">Apagar arquivo desta lista</button>
       <span class="sp"></span>
+      <button type="button" class="btn" id="aDown" hidden>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+        Baixar arquivo</button>
       <button type="button" class="btn pri" id="aClose">Fechar</button>
     </div>
   </div>
@@ -362,7 +365,7 @@ function renderArq(){
   const l=LISTS.find(x=>x.k===cur),v=arqView();
   $('#aTitle').textContent='Arquivo — '+l.n+(cur==='equipe'&&resp?' · '+resp:'')+' ('+v.length+')';
   $('#aList').innerHTML=v.length?v.map(r=>`<li class="item done" data-id="${r.id}"><span class="body"><span class="txt">${esc(r.texto)}</span>${r.obs?`<span class="obs">${esc(r.obs)}</span>`:''}<span class="meta">${r.lista==='equipe'&&r.resp?`<span class="tag r">${esc(r.resp)}</span>`:''}anotado ${fmtD(r.criado)} · feito ${fmtD(r.concluido)}</span></span><button class="btn sm" data-restore="${r.id}">Restaurar</button></li>`).join(''):'<li class="empty"><b>Arquivo vazio</b>Use "Arquivar concluídas" no fim da lista para guardar aqui o que já foi feito.</li>';
-  $('#aDel').hidden=!v.length;arqConfirm=false;$('#aDel').textContent='Apagar arquivo desta lista';
+  $('#aDel').hidden=!v.length;$('#aDown').hidden=!v.length||!dl;arqConfirm=false;$('#aDel').textContent='Apagar arquivo desta lista';
 }
 $('#btnArq').onclick=async()=>{
   if(!db){toast('Sem conexão: abra logado no claude.ai para ver o arquivo.');return}
@@ -380,6 +383,24 @@ $('#aDel').onclick=async()=>{
   $('#aDel').disabled=false;renderArq();toast(ids.length+' tarefas apagadas do arquivo');
 };
 $('#aClose').onclick=()=>$('#dlgArq').close();
+
+/* Baixar arquivo: planilha .csv que abre no Excel (separador ; e acentos preservados) */
+let dl=null;
+const fmtFull=d=>d?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4):'';
+const csvCell=v=>{v=String(v??'');return /[;"\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+$('#aDown').onclick=async()=>{
+  const v=arqView();if(!v.length||!dl)return;
+  const l=LISTS.find(x=>x.k===cur);
+  const head=['Lista','Tarefa','Observação','Responsável','Prioridade','Anotado em','Feito em','Arquivado em'];
+  const lines=[head].concat(v.map(r=>[l.t,r.texto,r.obs||'',r.resp||'',r.prio?'Sim':'',fmtFull(r.criado),fmtFull(r.concluido),fmtFull(r.arquivado)]));
+  const csv='﻿'+lines.map(a=>a.map(csvCell).join(';')).join('\r\n');
+  const slug=(l.n+(cur==='equipe'&&resp?'-'+resp:'')).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  const b=$('#aDown');b.disabled=true;
+  try{await dl.save({filename:'arquivo-'+slug+'-'+today()+'.csv',data:csv});toast('Arquivo salvo. Agora pode apagar daqui, se quiser.')}
+  catch(e){if(e&&e.code==='declined'){}else if(e&&e.code==='rate_limited')toast('Aguarde um instante e tente de novo.');else{toast('Não foi possível baixar aqui.');dl=null;b.hidden=true}}
+  finally{b.disabled=false}
+};
+(async()=>{for(let i=0;i<30&&!window.claude;i++)await new Promise(r=>setTimeout(r,100));try{dl=window.claude?await claude.use('downloads'):null}catch(e){dl=null}if($('#dlgArq').open)renderArq()})();
 
 $('#eLista').innerHTML=LISTS.map(l=>`<option value="${l.k}">${l.t}</option>`).join('');
 $('#eLista').onchange=()=>$('#eRespLbl').hidden=$('#eLista').value!=='equipe';
