@@ -88,6 +88,13 @@ main{padding-block:14px 120px;display:grid;gap:14px}
 .star{flex:0 0 auto;width:48px;height:56px;border:0;background:none;display:grid;place-items:center;color:var(--line)}
 .star svg{width:22px;height:22px}
 .item.prio .star{color:var(--prio)}
+.note{flex:0 0 auto;width:44px;height:56px;border:0;background:none;display:grid;place-items:center;color:var(--muted);position:relative}
+.note svg{width:21px;height:21px}
+.note:hover{color:var(--accent)}
+.note.has{color:var(--accent)}
+.note.has::after{content:"";position:absolute;top:16px;right:9px;width:8px;height:8px;border-radius:50%;background:var(--accent);border:2px solid var(--surface)}
+.obs{font-size:.88rem;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere;border-left:2px solid var(--line);padding-left:8px}
+.item.done .obs{opacity:.7}
 .star:hover{color:var(--prio)}
 .empty{padding:28px 16px;text-align:center;color:var(--muted)}
 .empty b{display:block;color:var(--ink);font-family:var(--f-head);font-size:1.05rem;margin-bottom:4px}
@@ -166,6 +173,7 @@ dialog::backdrop{background:rgba(10,15,12,.5)}
   <form class="dlg" id="editFrm" method="dialog">
     <h2>Editar tarefa</h2>
     <label>Tarefa<textarea id="eTxt" required></textarea></label>
+    <label>Observação<textarea id="eObs" placeholder="Detalhes, contato, local, o que falta…" style="min-height:70px"></textarea></label>
     <label>Lista<select id="eLista"></select></label>
     <label id="eRespLbl">Responsável<input id="eResp" list="respList" placeholder="Nome"></label>
     <label style="display:flex;gap:8px;align-items:center;color:var(--ink);font-size:1rem"><input type="checkbox" id="ePrio" style="width:20px;height:20px"> Prioridade</label>
@@ -206,6 +214,7 @@ const fmtD=d=>d?d.slice(8,10)+'/'+d.slice(5,7):'';
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const ICON_CK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 const ICON_ST='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6L2.5 9.4l6.6-.8z"/></svg>';
+const ICON_NOTE='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4z"/><path d="M8 8h8M8 12h5"/></svg>';
 const ICON_ST_O='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6L2.5 9.4l6.6-.8z"/></svg>';
 
 let rows=[],db=null,loaded=false,editing=null,addPrio=false;
@@ -256,7 +265,8 @@ function item(r){
   meta.push(r.feito?'feito '+fmtD(r.concluido):'anotado '+fmtD(r.criado));
   return `<li class="item${r.prio&&!r.feito?' prio':''}${r.feito?' done':''}" data-id="${r.id}">
     <button class="ck" data-act="ck" aria-label="${r.feito?'Desmarcar':'Marcar como feito'}"><span class="box">${ICON_CK}</span></button>
-    <button class="body" data-act="edit" aria-label="Editar"><span class="txt">${esc(r.texto)}</span><span class="meta">${meta.join('')}</span></button>
+    <button class="body" data-act="edit" aria-label="Editar"><span class="txt">${esc(r.texto)}</span>${r.obs?`<span class="obs">${esc(r.obs)}</span>`:''}<span class="meta">${meta.join('')}</span></button>
+    <button class="note${r.obs?' has':''}" data-act="note" aria-label="${r.obs?'Editar observação':'Adicionar observação'}" title="Observação">${ICON_NOTE}</button>
     ${r.feito?'':`<button class="star" data-act="prio" aria-label="${r.prio?'Tirar prioridade':'Marcar prioridade'}" aria-pressed="${!!r.prio}">${r.prio?ICON_ST:ICON_ST_O}</button>`}
   </li>`;
 }
@@ -295,23 +305,26 @@ function onList(e){
   const r=rows.find(x=>x.id===b.closest('.item').dataset.id);if(!r)return;
   if(b.dataset.act==='ck')save(r.id,r.feito?{feito:false,concluido:null,concluidoTs:null}:{feito:true,concluido:today(),concluidoTs:Date.now()});
   else if(b.dataset.act==='prio')save(r.id,{prio:!r.prio});
-  else openEdit(r);
+  else openEdit(r,b.dataset.act==='note');
 }
 $('#open').addEventListener('click',onList);$('#done').addEventListener('click',onList);
 $('#btnClear').onclick=()=>remove(rows.filter(r=>inView(r)&&r.feito).map(r=>r.id));
 
 $('#eLista').innerHTML=LISTS.map(l=>`<option value="${l.k}">${l.t}</option>`).join('');
 $('#eLista').onchange=()=>$('#eRespLbl').hidden=$('#eLista').value!=='equipe';
-function openEdit(r){
+function openEdit(r,focusObs){
   editing=r;
+  $('#eObs').value=r.obs||'';
+  $('#dlgEdit').querySelector('h2').textContent=focusObs?'Observação':'Editar tarefa';
   $('#eTxt').value=r.texto;$('#eLista').value=r.lista;$('#eResp').value=r.resp||'';$('#ePrio').checked=!!r.prio;
   $('#eRespLbl').hidden=r.lista!=='equipe';
   $('#dlgEdit').showModal();
+  if(focusObs){const o=$('#eObs');o.focus();o.setSelectionRange(o.value.length,o.value.length)}
 }
 $('#editFrm').addEventListener('submit',e=>{
   e.preventDefault();
   const t=$('#eTxt').value.trim();if(!t)return;
-  const lista=$('#eLista').value,d={texto:t,lista,prio:$('#ePrio').checked};
+  const lista=$('#eLista').value,d={texto:t,lista,prio:$('#ePrio').checked,obs:$('#eObs').value.trim()};
   d.resp=lista==='equipe'?$('#eResp').value.trim():'';
   if(lista==='equipe'&&!d.resp){toast('Informe o responsável');return}
   save(editing.id,d);$('#dlgEdit').close();
@@ -327,7 +340,7 @@ function buildText(){
   if(cur==='equipe'&&resp)title='Tarefas — '+resp;
   const lines=['*'+title+'* ('+fmtD(today())+')',''];
   const p=open.filter(r=>r.prio),n=open.filter(r=>!r.prio);
-  const line=(r,i)=>(i+1)+'. '+r.texto+(cur==='equipe'&&!resp&&r.resp?' — _'+r.resp+'_':'');
+  const line=(r,i)=>(i+1)+'. '+r.texto+(cur==='equipe'&&!resp&&r.resp?' — _'+r.resp+'_':'')+(r.obs?'\n   _Obs: '+r.obs.replace(/\n+/g,' / ')+'_':'');
   if(p.length){lines.push('*Prioridade*');p.forEach((r,i)=>lines.push(line(r,i)));if(n.length)lines.push('')}
   if(n.length){if(p.length)lines.push('*Demais*');n.forEach((r,i)=>lines.push(line(r,i)))}
   return {text:lines.join('\n'),count:open.length};
