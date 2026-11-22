@@ -158,6 +158,11 @@ legend{padding:0 6px;font-size:.78rem;text-transform:uppercase;letter-spacing:.0
 .bulk-row input{flex:1 1 160px;width:auto;min-width:0}
 body.has-bulk .wrap{padding-bottom:200px}
 body.has-bulk .toast{bottom:calc(150px + env(safe-area-inset-bottom,0px))}
+.sync{font-family:var(--f-body);font-size:.75rem;font-weight:500;letter-spacing:0;vertical-align:middle;margin-left:8px;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.sync[data-state="ok"]{background:var(--ok-soft);color:var(--ok)}
+.sync[data-state="slow"]{background:var(--warn-soft);color:var(--warn)}
+@media (prefers-reduced-motion:no-preference){.sync[data-state="busy"]{animation:pulse 1.2s ease-in-out infinite}}
+@keyframes pulse{50%{opacity:.5}}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:.88rem;z-index:20}
 @media (prefers-reduced-motion:no-preference){.card{transition:border-color .2s}}
 </style>
@@ -165,7 +170,7 @@ body.has-bulk .toast{bottom:calc(150px + env(safe-area-inset-bottom,0px))}
 <div class="wrap">
   <header class="top">
     <div>
-      <h1>Aditivos de Contrato</h1>
+      <h1>Aditivos de Contrato <span id="sync" class="sync" data-state="busy" role="status">Carregando…</span></h1>
       <p>Da necessidade até o saldo liberado para medição. Prazos contados em dias úteis (d.u.) desde a entrada em cada etapa.</p>
     </div>
     <div class="top-actions">
@@ -636,21 +641,29 @@ let toastT;
 function toast(m){let el=$('.toast');if(!el){el=document.createElement('div');el.className='toast';el.setAttribute('role','status');document.body.appendChild(el)}el.textContent=m;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>el.hidden=true,2600)}
 
 /* Dados */
+const CACHE_KEY='aditivos-cache-v1';
+function setSync(state,msg){const el=$('#sync');el.dataset.state=state;el.textContent=msg}
+function saveCache(){try{localStorage.setItem(CACHE_KEY,JSON.stringify({rows,cfg,t:Date.now()}))}catch(e){}}
+let fromLocal=false;
+try{const c=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');if(c&&Array.isArray(c.rows)){rows=c.rows.filter(d=>IDX[d.etapa]!=null);cfg=c.cfg||cfg;loaded=true;fromLocal=true}}catch(e){}
+setSync('busy',fromLocal?'Atualizando…':'Carregando…');
 render();
 (async()=>{
-  const timer=setTimeout(()=>{if(!loaded){loaded=true;render();toast('Os dados estão demorando para carregar…')}},10000);
+  const timer=setTimeout(()=>{setSync('slow',fromLocal?'Conexão lenta: mostrando a última cópia salva':'Conexão lenta, ainda tentando…');if(!loaded){loaded=true;render()}},10000);
   for(let i=0;i<30&&!window.claude;i++)await new Promise(r=>setTimeout(r,100));
   try{db=window.claude?await claude.use('db'):null}catch(e){db=null}
-  if(!db){clearTimeout(timer);loaded=true;render();return}
-  db.doc('config/geral').onSnapshot(s=>{cfg=s.exists?{setor:'',sla:{},...s.data()}:{setor:'',sla:{}};render()},()=>{});
+  if(!db){clearTimeout(timer);loaded=true;setSync('slow',fromLocal?'Sem conexão: mostrando a última cópia salva (só leitura)':'Sem conexão com os dados');render();return}
+  db.doc('config/geral').onSnapshot(s=>{if(s.metadata.fromCache&&!s.exists)return;cfg=s.exists?{setor:'',sla:{},...s.data()}:{setor:'',sla:{}};if(!s.metadata.fromCache)saveCache();render()},()=>{});
   db.collection('aditivos').onSnapshot(s=>{
+    if(s.metadata.fromCache&&s.empty&&rows.length)return;
     rows=s.docs.map(x=>({id:x.id,...x.data()})).filter(d=>IDX[d.etapa]!=null);
-    if(!s.metadata.fromCache){clearTimeout(timer)}
+    if(!s.metadata.fromCache){clearTimeout(timer);setSync('ok','Atualizado');saveCache()}
+    else if(!rows.length)return;
     loaded=true;
     [...sel].forEach(id=>{if(!rows.some(r=>r.id===id))sel.delete(id)});
     if(editing){const fresh=rows.find(r=>r.id===editing.id);if(fresh){editing=fresh;if($('#dlg').open)renderLog(fresh)}}
     render();
-  },e=>{clearTimeout(timer);loaded=true;render();toast('Conexão com os dados perdida. Recarregue a página.')});
+  },e=>{clearTimeout(timer);loaded=true;setSync('slow','Conexão perdida: recarregue a página');render()});
 })();
 // Atualiza contagem de dias quando a data vira
 setInterval(()=>{const t=today();if(t!==window.__d){window.__d=t;render()}},60000);window.__d=today();
