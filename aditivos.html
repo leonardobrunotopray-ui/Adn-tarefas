@@ -147,7 +147,10 @@ legend{padding:0 6px;font-size:.78rem;text-transform:uppercase;letter-spacing:.0
 .log time{font-family:var(--f-mono);color:var(--muted);font-size:.78rem;padding-top:1px}
 .addnote{display:flex;gap:8px}
 .addnote input{flex:1;min-width:0}
-.slagrid{display:grid;grid-template-columns:1fr 90px;gap:6px 12px;align-items:center}
+.slagrid{display:grid;grid-template-columns:minmax(0,1fr) 70px minmax(0,1.1fr);gap:6px 10px;align-items:center}
+.slagrid .hd{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.stage-name .resp{font-weight:400;color:var(--muted)}
+.timeline .who{display:block;font-size:.75rem;color:var(--muted);font-weight:400}
 /* Seleção múltipla */
 .card{position:relative}
 @media (pointer:coarse){.card{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}}
@@ -223,6 +226,7 @@ details.imp ul{margin:8px 0 0;padding-left:18px;font-size:.85rem;color:var(--mut
   <div class="filters">
     <input type="search" id="q" placeholder="Buscar por título, obra, empreiteiro, contrato, RM…" aria-label="Buscar">
     <select id="fObra" aria-label="Filtrar por obra"><option value="">Todas as obras</option></select>
+    <select id="fResp" aria-label="Filtrar por responsável da etapa atual"><option value="">Todos os responsáveis</option></select>
     <label class="check"><input type="checkbox" id="fBlock"> Só com entrave</label>
     <label class="check"><input type="checkbox" id="fDone"> Mostrar liberados e arquivados</label>
     <span id="activeStage"></span>
@@ -258,14 +262,15 @@ details.imp ul{margin:8px 0 0;padding-left:18px;font-size:.85rem;color:var(--mut
         <legend>Situação no fluxo</legend>
         <div class="grid">
           <label class="field"><span class="label">Etapa atual</span><select id="f_etapa"></select></label>
+          <label class="field"><span class="label" id="f_respLbl">Responsável nesta etapa</span><input id="f_resp" list="respList" placeholder="Ex.: Lucas, Taina, Eu"></label>
           <label class="field"><span class="label">Entrou nessa etapa em</span><input id="f_entrada" type="date"></label>
           <label class="field"><span class="label">Precisa de negociação (Suprimentos)?</span><select id="f_neg"><option value="">Não</option><option value="sim">Sim</option></select></label>
           <label class="field"><span class="label">Insumo existe no cadastro?</span><select id="f_cad"><option value="">Não verificado</option><option value="sim">Sim</option><option value="nao">Não (pedir ao Orçamento criar)</option></select></label>
-          <label class="field"><span class="label">Pedido ao Orçamento em</span><input id="f_orcPed" type="date"></label>
-          <label class="field"><span class="label">Orçamento criou o insumo em</span><input id="f_orcOk" type="date"></label>
+          <label class="field" id="w_orcPed"><span class="label">Pedido ao Orçamento em</span><input id="f_orcPed" type="date"></label>
+          <label class="field" id="w_orcOk"><span class="label">Orçamento criou o insumo em</span><input id="f_orcOk" type="date"></label>
           <label class="field"><span class="label">Insumo existe na etapa?</span><select id="f_insumo"><option value="">Não verificado</option><option value="sim">Sim</option><option value="nao">Não (pedir alocação ao Controle)</option></select></label>
-          <label class="field"><span class="label">Alocação pedida ao Controle</span><input id="f_alocPed" type="date"></label>
-          <label class="field"><span class="label">Controle alocou em</span><input id="f_alocOk" type="date"></label>
+          <label class="field" id="w_alocPed"><span class="label">Alocação pedida ao Controle</span><input id="f_alocPed" type="date"></label>
+          <label class="field" id="w_alocOk"><span class="label">Controle alocou em</span><input id="f_alocOk" type="date"></label>
           <label class="field"><span class="label">Houve estouro do insumo?</span><select id="f_estouro"><option value="">Ainda não sei</option><option value="nao">Não</option><option value="sim">Sim (coord. + gerente aprovam)</option></select></label>
           <label class="field"><span class="label">Nº da RM (Mega)</span><input id="f_rm" class="mono"></label>
           <label class="field"><span class="label">Nº da cotação (Mega)</span><input id="f_cot" class="mono"></label>
@@ -298,6 +303,7 @@ details.imp ul{margin:8px 0 0;padding-left:18px;font-size:.85rem;color:var(--mut
 </dialog>
 <datalist id="obrasList"></datalist>
 <datalist id="blkPresets"></datalist>
+<datalist id="respList"></datalist>
 
 <div class="bulk" id="bulk" hidden role="toolbar" aria-label="Ações nos selecionados">
   <div class="bulk-in">
@@ -328,7 +334,7 @@ details.imp ul{margin:8px 0 0;padding-left:18px;font-size:.85rem;color:var(--mut
     <div class="dlg-head"><h2>Ajustes</h2><button type="button" class="ghost" data-close>Fechar</button></div>
     <div class="dlg-body">
       <label class="field"><span class="label">Setor que sobe o saldo e gera o contrato</span><input id="c_setor" placeholder="Ex.: setor de Contratos"></label>
-      <div class="field"><span class="label">Prazo de cada etapa (dias úteis)</span><div class="slagrid" id="slaGrid"></div></div>
+      <div class="field"><span class="label">Prazo (dias úteis) e responsável padrão de cada etapa</span><div class="slagrid" id="slaGrid"></div></div>
     </div>
     <div class="dlg-foot"><span class="spacer"></span><button type="button" data-close>Cancelar</button><button type="submit" class="primary">Salvar ajustes</button></div>
   </form>
@@ -479,6 +485,7 @@ async function write(id,patch){
 function logPlus(d,msg){return[...(d.log||[]),{t:today(),msg}]}
 function move(d,to,extra={},msg){
   const p={...resolveRep(d,to),...extra,etapa:to,entradas:{[to]:today()},log:logPlus(d,msg||('Etapa: '+STAGES[IDX[to]].n))};
+  if(!(d.resp&&d.resp[to])&&cfg.resp&&cfg.resp[to])p.resp={[to]:cfg.resp[to]};
   return write(d.id,p);
 }
 let motResolve=null;
@@ -521,6 +528,7 @@ function filtered(){
     if(stageFilter){if(d.etapa!==stageFilter||d.arquivado)return false}
     else if(!all&&(d.arquivado||d.etapa==='liberado'))return false;
     if(ob&&d.obra!==ob)return false;
+    {const fr=$('#fResp').value;if(fr&&respOf(d,d.etapa)!==fr)return false}
     if($('#fBlock').checked&&!blk(d).length)return false;
     if(q){const h=[d.titulo,d.obra,d.empreiteiro,d.contrato,d.rm,d.cotacao,d.notas,d.motivo,...blk(d)].join(' ').toLowerCase();if(!h.includes(q))return false}
     return true;
@@ -556,6 +564,8 @@ function render(){
   const obraSel=$('#fObra'), cur=obraSel.value;
   obraSel.innerHTML='<option value="">Todas as obras</option>'+obras.map(o=>`<option ${o===cur?'selected':''}>${esc(o)}</option>`).join('');
   $('#obrasList').innerHTML=obras.map(o=>`<option value="${esc(o)}">`).join('');
+  {const rs=[...new Set(rows.filter(d=>!d.arquivado&&d.etapa!=='liberado').map(d=>respOf(d,d.etapa)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+   const el=$('#fResp'),cv=el.value;el.innerHTML='<option value="">Todos os responsáveis</option>'+rs.map(r=>`<option ${r===cv?'selected':''}>${esc(r)}</option>`).join('');el.hidden=!rs.length}
 
   const list=$('#list');
   if(!db&&loaded){list.innerHTML=`<div class="empty" style="grid-column:1/-1"><strong>Não foi possível acessar seus dados</strong>Abra este painel logado na sua conta do claude.ai para ver e salvar os aditivos.</div>`;return}
@@ -576,7 +586,7 @@ function render(){
       <div class="card-top"><div><h3>${esc(d.titulo||'(sem descrição)')}</h3><p class="meta">${meta||'—'}</p></div>${d.valor!=null?`<div class="val">${esc(brl(d.valor))}</div>`:''}</div>
       ${blk(d).length&&!d.arquivado?`<div class="blocks">${blk(d).map(b=>`<span class="chip block">Entrave: ${esc(b)}</span>`).join('')}</div>`:''}
       <ol class="steps" aria-label="Etapa ${i+1} de ${STAGES.length}">${steps}</ol>
-      <div class="stage-row"><span class="stage-name"><span class="num">${pad(i+1)}/${STAGES.length}</span>${esc(STAGES[i].n)}</span><span class="chip ${s.chip}">${esc(s.label)}</span></div>
+      <div class="stage-row"><span class="stage-name"><span class="num">${pad(i+1)}/${STAGES.length}</span>${esc(STAGES[i].n)}${!d.arquivado&&d.etapa!=='liberado'&&respOf(d,d.etapa)?`<span class="resp"> · ${esc(respOf(d,d.etapa))}</span>`:''}</span><span class="chip ${s.chip}">${esc(s.label)}</span></div>
       ${tagsFor(d)}
       ${d.insumoCriado&&IDX[d.etapa]>=IDX.insumo&&IDX[d.etapa]<=IDX.rm?`<p class="note" style="margin:0">Insumo criado pelo Orçamento em ${fmtD(d.insumoCriado)}${d.orcPedido?' (pedido em '+fmtD(d.orcPedido)+')':''}.</p>`:''}
       <p class="next">${esc(nextText(d))}</p>
@@ -597,7 +607,7 @@ function openDlg(d){
   v('#f_titulo',d?.titulo);v('#f_obra',d?.obra);v('#f_empreiteiro',d?.empreiteiro);v('#f_contrato',d?.contrato);
   v('#f_valor',d?.valor!=null?d.valor.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');
   v('#f_etapa',d?.etapa||'necessidade');v('#f_entrada',d?(d.entradas?.[d.etapa]||''):today());
-  v('#f_neg',d?.negociar==='sim'?'sim':'');v('#f_cad',d?.insumoCadastro);v('#f_orcPed',d?.orcPedido);v('#f_orcOk',d?.insumoCriado);v('#f_insumo',d?.insumoExiste);v('#f_alocPed',d?.alocacaoSolicitada);v('#f_alocOk',d?.alocacaoOk);v('#f_estouro',d?.estouro);
+  v('#f_neg',d?.negociar==='sim'?'sim':'');v('#f_resp',d?respOf(d,d.etapa):(cfg.resp?.necessidade||''));v('#f_cad',d?.insumoCadastro);v('#f_orcPed',d?.orcPedido);v('#f_orcOk',d?.insumoCriado);v('#f_insumo',d?.insumoExiste);v('#f_alocPed',d?.alocacaoSolicitada);v('#f_alocOk',d?.alocacaoOk);v('#f_estouro',d?.estouro);
   v('#f_rm',d?.rm);v('#f_cot',d?.cotacao);v('#f_notas',d?.notas);v('#f_motivo',d?.motivo);v('#f_prazo',d?.prazo);v('#f_prio',d?.prioridade);
   $('#f_motivoLbl').textContent=d?.motivoTipo==='reprova'?'Motivo da reprova do Controle'+(d.motivoData?' ('+fmtD(d.motivoData)+')':''):d?.motivoTipo==='cancelamento'?'Motivo do cancelamento'+(d.motivoData?' ('+fmtD(d.motivoData)+')':''):'Motivo (reprova do Controle / cancelamento)';
   $('#histBox').hidden=!d;$('#btnDel').hidden=!d;$('#btnArch').hidden=!d;$('#btnCancel').hidden=!d||!!d.arquivado;
@@ -606,9 +616,11 @@ function openDlg(d){
     $('#btnArch').textContent=d.arquivado?'Reativar':'Arquivar';
     const i=IDX[d.etapa];
     $('#timeline').innerHTML=STAGES.map((s,j)=>{const c=skipped(d,s.k)?'skip':(j<i||d.etapa==='liberado')?'done':j===i?'cur':'';
-      return`<li class="${c}"><span class="dot"></span><span>${esc(s.n)}</span><span class="mono muted">${c==='skip'?'não se aplica':fmtD(d.entradas?.[s.k])}</span></li>`}).join('');
+      const rw=c!=='skip'&&(c==='done'||c==='cur')?respOf(d,s.k):'';
+      return`<li class="${c}"><span class="dot"></span><span>${esc(s.n)}${rw?`<span class="who">${esc(rw)}</span>`:''}</span><span class="mono muted">${c==='skip'?'não se aplica':fmtD(d.entradas?.[s.k])}</span></li>`}).join('');
     renderLog(d);renderCk(d);
   }
+  respOptions();syncFields();
   $('#dlg').showModal();
 }
 const BLK_PRESETS=['Aguardando validação','Pendência de documento da empresa','Aguardando resposta do empreiteiro','Em análise','Divergência de quantitativo','Aguardando retorno do Controle','Falta de insumo na etapa'];
@@ -628,6 +640,17 @@ async function saveBlk(msg){
 $('#blkAdd').addEventListener('click',()=>{const v=$('#blkIn').value.trim();if(!v)return;$('#blkIn').value='';if(dlgBlk.some(x=>x.toLowerCase()===v.toLowerCase()))return;dlgBlk.push(v);saveBlk('Entrave: '+v)});
 $('#blkIn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#blkAdd').click()}});
 $('#blkList').addEventListener('click',e=>{const b=e.target.closest('[data-blkdel]');if(!b)return;const [x]=dlgBlk.splice(+b.dataset.blkdel,1);saveBlk('Entrave resolvido: '+x)});
+// Responsável da etapa: o do aditivo; se não houver, o padrão de Ajustes
+function respOf(d,k){return(d.resp&&d.resp[k])||(cfg.resp&&cfg.resp[k])||''}
+function respNames(){return[...new Set(['Eu',...Object.values(cfg.resp||{}),...rows.flatMap(d=>Object.values(d.resp||{}))].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'))}
+function respOptions(){$('#respList').innerHTML=respNames().map(x=>`<option value="${esc(x)}">`).join('')}
+function syncFields(){
+  const cad=$('#f_cad').value==='nao', ins=$('#f_insumo').value==='nao';
+  $('#w_orcPed').hidden=!cad;$('#w_orcOk').hidden=!cad;$('#w_alocPed').hidden=!ins;$('#w_alocOk').hidden=!ins;
+  const k=$('#f_etapa').value;$('#f_respLbl').textContent='Responsável em '+(STAGES[IDX[k]]?.n||'nesta etapa');
+}
+$('#f_cad').addEventListener('change',syncFields);$('#f_insumo').addEventListener('change',syncFields);
+$('#f_etapa').addEventListener('change',()=>{syncFields();const k=$('#f_etapa').value;$('#f_resp').value=editing?respOf(editing,k):(cfg.resp?.[k]||'')});
 function renderLog(d){$('#log').innerHTML=[...(d.log||[])].reverse().map(l=>`<li><time>${fmtD(l.t)}</time><span>${esc(l.msg)}</span></li>`).join('')||'<li class="muted">Sem registros.</li>'}
 
 $('#frm').addEventListener('submit',async e=>{
@@ -635,8 +658,9 @@ $('#frm').addEventListener('submit',async e=>{
   if(!db){toast('Sem conexão com o armazenamento.');return}
   const g=id=>$(id).value.trim();
   const etapa=g('#f_etapa'), entrada=g('#f_entrada')||today();
-  const base={entraves:[...dlgBlk],titulo:g('#f_titulo'),obra:g('#f_obra'),empreiteiro:g('#f_empreiteiro'),contrato:g('#f_contrato'),valor:parseMoney(g('#f_valor')),
-    etapa,negociar:g('#f_neg')||null,insumoCadastro:g('#f_cad')||null,orcPedido:g('#f_orcPed')||null,insumoCriado:g('#f_orcOk')||null,insumoExiste:g('#f_insumo')||null,alocacaoSolicitada:g('#f_alocPed')||null,alocacaoOk:g('#f_alocOk')||null,estouro:g('#f_estouro')||null,
+  const hidOrc=$('#f_cad').value!=='nao', hidAloc=$('#f_insumo').value!=='nao';
+  const base={resp:{[etapa]:g('#f_resp')||null},entraves:[...dlgBlk],titulo:g('#f_titulo'),obra:g('#f_obra'),empreiteiro:g('#f_empreiteiro'),contrato:g('#f_contrato'),valor:parseMoney(g('#f_valor')),
+    etapa,negociar:g('#f_neg')||null,insumoCadastro:g('#f_cad')||null,orcPedido:hidOrc?null:g('#f_orcPed')||null,insumoCriado:hidOrc?null:g('#f_orcOk')||null,insumoExiste:g('#f_insumo')||null,alocacaoSolicitada:hidAloc?null:g('#f_alocPed')||null,alocacaoOk:hidAloc?null:g('#f_alocOk')||null,estouro:g('#f_estouro')||null,
     rm:g('#f_rm'),cotacao:g('#f_cot'),notas:$('#f_notas').value,motivo:$('#f_motivo').value.trim(),prazo:g('#f_prazo')||null,prioridade:g('#f_prio')||null,atualizado:new Date().toISOString()};
   const btn=$('#btnSave');btn.disabled=true;
   try{
@@ -675,14 +699,15 @@ $('#btnCancel').addEventListener('click',async()=>{const d=editing;$('#dlg').clo
 /* Ajustes */
 function openCfg(){
   $('#c_setor').value=cfg.setor||'';
-  $('#slaGrid').innerHTML=STAGES.filter(s=>s.k!=='liberado').map(s=>`<label for="sla_${s.k}">${esc(s.n)}</label><input id="sla_${s.k}" type="number" min="0" max="60" class="mono" value="${slaOf(s.k)}">`).join('')+
-   `<label for="sla_aloc">Alocação do insumo pelo Controle</label><input id="sla_aloc" type="number" class="mono" value="${ALOC_SLA}" disabled>`;
+  respOptions();
+  $('#slaGrid').innerHTML='<span class="hd">Etapa</span><span class="hd">Prazo</span><span class="hd">Responsável padrão</span>'+STAGES.filter(s=>s.k!=='liberado').map(s=>`<label for="sla_${s.k}">${esc(s.n)}</label><input id="sla_${s.k}" type="number" min="0" max="60" class="mono" value="${slaOf(s.k)}" aria-label="Prazo de ${esc(s.n)}"><input id="resp_${s.k}" list="respList" value="${esc(cfg.resp?.[s.k]||'')}" placeholder="${esc(txt(s.who))}" aria-label="Responsável padrão em ${esc(s.n)}">`).join('')+
+   `<label for="sla_aloc">Alocação do insumo pelo Controle</label><input id="sla_aloc" type="number" class="mono" value="${ALOC_SLA}" disabled><span></span>`;
   $('#cfg').showModal();
 }
 $('#cfgFrm').addEventListener('submit',async e=>{
   e.preventDefault();
-  const sla={};STAGES.forEach(s=>{const el=$('#sla_'+s.k);if(el)sla[s.k]=Math.max(0,parseInt(el.value,10)||0)});
-  try{await db.doc('config/geral').set({setor:$('#c_setor').value.trim(),sla});$('#cfg').close();toast('Ajustes salvos')}catch(err){toast('Não foi possível salvar os ajustes.')}
+  const sla={},resp={};STAGES.forEach(s=>{const el=$('#sla_'+s.k);if(el)sla[s.k]=Math.max(0,parseInt(el.value,10)||0);const r=$('#resp_'+s.k)?.value.trim();if(r)resp[s.k]=r});
+  try{await db.doc('config/geral').set({setor:$('#c_setor').value.trim(),sla,resp});$('#cfg').close();toast('Ajustes salvos')}catch(err){toast('Não foi possível salvar os ajustes.')}
 });
 
 /* CSV */
@@ -814,7 +839,7 @@ $('#bDel').onclick=async()=>{
   const fail=await bulk(l,d=>db.doc('aditivos/'+d.id).delete(),l.length===1?'1 aditivo excluído':l.length+' aditivos excluídos');
   if(!fail)exitSel();
 };
-['#q','#fObra','#fDone','#fBlock'].forEach(s=>$(s).addEventListener('input',render));
+['#q','#fObra','#fResp','#fDone','#fBlock'].forEach(s=>$(s).addEventListener('input',render));
 
 let toastT;
 function toast(m){let el=$('.toast');if(!el){el=document.createElement('div');el.className='toast';el.setAttribute('role','status');document.body.appendChild(el)}el.textContent=m;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>el.hidden=true,2600)}
