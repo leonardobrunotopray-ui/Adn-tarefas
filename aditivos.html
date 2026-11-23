@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-/* Layout: painel operacional — régua do fluxo (15 etapas) no topo, fila de aditivos em cartões abaixo, detalhe em diálogo. */
+/* Layout: painel operacional — régua do fluxo (16 etapas) no topo, fila de aditivos em cartões abaixo, detalhe em diálogo. */
 :root{
   --bg:#eef1f4; --surface:#ffffff; --surface-2:#f6f8fa; --ink:#16202a; --muted:#5a6774; --line:#d6dce3;
   --accent:#1c5d8f; --accent-soft:#e3eef7; --accent-ink:#ffffff;
@@ -55,7 +55,7 @@ header.top p{margin:4px 0 0;color:var(--muted);max-width:62ch}
 
 /* Régua do fluxo */
 .flow{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
-.flow ol{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(15,minmax(84px,1fr));min-width:1300px}
+.flow ol{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(16,minmax(84px,1fr));min-width:1380px}
 .flow li{border-right:1px solid var(--line)}
 .flow li:last-child{border-right:0}
 .flow button{width:100%;height:100%;border:0;border-radius:0;background:transparent;text-align:left;padding:10px 10px 12px;display:grid;gap:4px;align-content:start;position:relative}
@@ -92,7 +92,7 @@ textarea{resize:vertical;min-height:70px}
 .card-top h3{overflow-wrap:anywhere}
 .meta{margin:2px 0 0;color:var(--muted);font-size:.84rem;overflow-wrap:anywhere}
 .val{font-family:var(--f-mono);font-size:.88rem;white-space:nowrap}
-.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(15,1fr);gap:3px}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(16,1fr);gap:3px}
 .steps li{height:6px;border-radius:2px;background:var(--line)}
 .steps li.done{background:var(--accent)}
 .steps li.cur{background:var(--accent);opacity:.45;outline:1px solid var(--accent)}
@@ -259,6 +259,7 @@ details.imp ul{margin:8px 0 0;padding-left:18px;font-size:.85rem;color:var(--mut
         <div class="grid">
           <label class="field"><span class="label">Etapa atual</span><select id="f_etapa"></select></label>
           <label class="field"><span class="label">Entrou nessa etapa em</span><input id="f_entrada" type="date"></label>
+          <label class="field"><span class="label">Precisa de negociação (Suprimentos)?</span><select id="f_neg"><option value="">Não</option><option value="sim">Sim</option></select></label>
           <label class="field"><span class="label">Insumo existe no cadastro?</span><select id="f_cad"><option value="">Não verificado</option><option value="sim">Sim</option><option value="nao">Não (pedir ao Orçamento criar)</option></select></label>
           <label class="field"><span class="label">Pedido ao Orçamento em</span><input id="f_orcPed" type="date"></label>
           <label class="field"><span class="label">Orçamento criou o insumo em</span><input id="f_orcOk" type="date"></label>
@@ -355,7 +356,8 @@ details.imp ul{margin:8px 0 0;padding-left:18px;font-size:.85rem;color:var(--mut
 <script>
 const STAGES=[
  {k:'necessidade',n:'Necessidade',a:'Entender e confirmar a necessidade do aditivo.',sla:3,who:'Você'},
- {k:'levantamento',n:'Levantamento',a:'Levantar quantitativos e valores do aditivo.',sla:5,who:'Você'},
+ {k:'levantamento',n:'Levantamento inicial',a:'Levantamento inicial de quantitativos e valores feito pela Obra.',sla:3,who:'Obra'},
+ {k:'negociacao',n:'Negociação',a:'Suprimentos negocia os valores com o empreiteiro.',sla:3,who:'Suprimentos'},
  {k:'criar_insumo',n:'Criar insumo',a:'Insumo não existe no cadastro: pedir ao setor de Orçamento que crie o insumo.',sla:2,who:'Orçamento'},
  {k:'insumo',n:'Insumo na etapa',a:'Conferir no Mega se o insumo existe na etapa do serviço.',sla:2,who:'Você / Controle'},
  {k:'rm',n:'Subir RM',a:'Subir a RM (requisição de material e serviço) no Mega.',sla:1,who:'Você'},
@@ -433,13 +435,14 @@ function tagsFor(d){
   return t.length?`<div class="stage-row" style="justify-content:flex-start">${t.join('')}</div>`:'';
 }
 const teveRep=d=>!!d.teveReprova||d.motivoTipo==='reprova';
-function skipped(d,k){return(k==='aprov_gestao'&&d.estouro==='nao')||((k==='correcao_rm'||k==='reaprovacao')&&!teveRep(d))||(k==='criar_insumo'&&d.insumoCadastro!=='nao')}
+function skipped(d,k){return(k==='negociacao'&&d.negociar!=='sim')||(k==='aprov_gestao'&&d.estouro==='nao')||((k==='correcao_rm'||k==='reaprovacao')&&!teveRep(d))||(k==='criar_insumo'&&d.insumoCadastro!=='nao')}
 function nextKey(d){let i=IDX[d.etapa]+1;while(STAGES[i]&&skipped(d,STAGES[i].k))i++;return STAGES[i]?.k}
 
 function actions(d){
   const k=d.etapa;
   if(d.arquivado)return[{id:'desarquivar',label:'Reativar'}];
-  if(k==='levantamento')return[{id:'cad_sim',label:'Concluir → Insumo na etapa',primary:1},{id:'cad_nao',label:'Insumo não existe: pedir ao Orçamento'}];
+  if(k==='levantamento')return[{id:'cad_sim',label:'Concluir → Insumo na etapa',primary:1},{id:'neg',label:'Precisa negociar → Suprimentos'},{id:'cad_nao',label:'Insumo não existe: pedir ao Orçamento'}];
+  if(k==='negociacao')return[{id:'cad_sim',label:'Negociado → Insumo na etapa',primary:1},{id:'cad_nao',label:'Negociado; insumo não existe → Orçamento'}];
   if(k==='criar_insumo')return[{id:'orc_ok',label:'Orçamento criou → Insumo na etapa',primary:1}];
   if(k==='insumo'){
     if(d.insumoExiste==='nao'&&!d.alocacaoOk&&!d.alocacaoSolicitada)return[{id:'insumo_nao',label:'E-mail enviado ao Controle',primary:1},{id:'alocado',label:'Controle já alocou → subir RM'}];
@@ -497,6 +500,7 @@ async function cancelar(d){
 function doAction(id,d){
   switch(id){
     case'adv':return move(d,nextKey(d));
+    case'neg':return move(d,'negociacao',{negociar:'sim'},'Enviado para negociação com Suprimentos');
     case'cad_sim':return move(d,'insumo',{insumoCadastro:d.insumoCadastro==='nao'?'nao':'sim'});
     case'cad_nao':return move(d,'criar_insumo',{insumoCadastro:'nao',orcPedido:today()},'Insumo não existe no cadastro: pedido ao Orçamento para criar');
     case'orc_ok':return move(d,'insumo',{insumoCriado:today(),insumoExiste:'nao'},'Orçamento criou o insumo → Insumo na etapa (pedir alocação ao Controle)');
@@ -527,7 +531,7 @@ function render(){
   renderBulk();
   const active=rows.filter(d=>!d.arquivado&&d.etapa!=='liberado');
   const late=active.filter(d=>status(d).late);
-  const waitOthers=active.filter(d=>['aprov_controle','reaprovacao','aprov_gestao','aprov_suprimentos','assinatura'].includes(d.etapa)||(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk));
+  const waitOthers=active.filter(d=>['levantamento','negociacao','criar_insumo','aprov_controle','reaprovacao','aprov_gestao','aprov_suprimentos','assinatura'].includes(d.etapa)||(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk));
   const total=active.reduce((s,d)=>s+(typeof d.valor==='number'?d.valor:0),0);
   const liberadosMes=rows.filter(d=>d.etapa==='liberado'&&(d.entradas?.liberado||'').slice(0,7)===today().slice(0,7)).length;
   $('#summary').innerHTML=loaded?`
@@ -593,7 +597,7 @@ function openDlg(d){
   v('#f_titulo',d?.titulo);v('#f_obra',d?.obra);v('#f_empreiteiro',d?.empreiteiro);v('#f_contrato',d?.contrato);
   v('#f_valor',d?.valor!=null?d.valor.toLocaleString('pt-BR',{minimumFractionDigits:2}):'');
   v('#f_etapa',d?.etapa||'necessidade');v('#f_entrada',d?(d.entradas?.[d.etapa]||''):today());
-  v('#f_cad',d?.insumoCadastro);v('#f_orcPed',d?.orcPedido);v('#f_orcOk',d?.insumoCriado);v('#f_insumo',d?.insumoExiste);v('#f_alocPed',d?.alocacaoSolicitada);v('#f_alocOk',d?.alocacaoOk);v('#f_estouro',d?.estouro);
+  v('#f_neg',d?.negociar==='sim'?'sim':'');v('#f_cad',d?.insumoCadastro);v('#f_orcPed',d?.orcPedido);v('#f_orcOk',d?.insumoCriado);v('#f_insumo',d?.insumoExiste);v('#f_alocPed',d?.alocacaoSolicitada);v('#f_alocOk',d?.alocacaoOk);v('#f_estouro',d?.estouro);
   v('#f_rm',d?.rm);v('#f_cot',d?.cotacao);v('#f_notas',d?.notas);v('#f_motivo',d?.motivo);v('#f_prazo',d?.prazo);v('#f_prio',d?.prioridade);
   $('#f_motivoLbl').textContent=d?.motivoTipo==='reprova'?'Motivo da reprova do Controle'+(d.motivoData?' ('+fmtD(d.motivoData)+')':''):d?.motivoTipo==='cancelamento'?'Motivo do cancelamento'+(d.motivoData?' ('+fmtD(d.motivoData)+')':''):'Motivo (reprova do Controle / cancelamento)';
   $('#histBox').hidden=!d;$('#btnDel').hidden=!d;$('#btnArch').hidden=!d;$('#btnCancel').hidden=!d||!!d.arquivado;
@@ -632,7 +636,7 @@ $('#frm').addEventListener('submit',async e=>{
   const g=id=>$(id).value.trim();
   const etapa=g('#f_etapa'), entrada=g('#f_entrada')||today();
   const base={entraves:[...dlgBlk],titulo:g('#f_titulo'),obra:g('#f_obra'),empreiteiro:g('#f_empreiteiro'),contrato:g('#f_contrato'),valor:parseMoney(g('#f_valor')),
-    etapa,insumoCadastro:g('#f_cad')||null,orcPedido:g('#f_orcPed')||null,insumoCriado:g('#f_orcOk')||null,insumoExiste:g('#f_insumo')||null,alocacaoSolicitada:g('#f_alocPed')||null,alocacaoOk:g('#f_alocOk')||null,estouro:g('#f_estouro')||null,
+    etapa,negociar:g('#f_neg')||null,insumoCadastro:g('#f_cad')||null,orcPedido:g('#f_orcPed')||null,insumoCriado:g('#f_orcOk')||null,insumoExiste:g('#f_insumo')||null,alocacaoSolicitada:g('#f_alocPed')||null,alocacaoOk:g('#f_alocOk')||null,estouro:g('#f_estouro')||null,
     rm:g('#f_rm'),cotacao:g('#f_cot'),notas:$('#f_notas').value,motivo:$('#f_motivo').value.trim(),prazo:g('#f_prazo')||null,prioridade:g('#f_prio')||null,atualizado:new Date().toISOString()};
   const btn=$('#btnSave');btn.disabled=true;
   try{
