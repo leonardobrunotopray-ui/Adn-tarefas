@@ -80,6 +80,8 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .bld .roof{height:5px;margin-inline:-3px;background:var(--ink);border-radius:2px 2px 0 0}
 .fl{height:26px;border:1.5px solid var(--ink);border-top-width:0;border-radius:0;padding:0;position:relative;display:flex;align-items:center;justify-content:center;font:500 .66rem/1 var(--f-mono);color:var(--muted)}
 .fl:first-of-type{border-top-width:1.5px}
+.fl.gnd{border-bottom-width:4px}
+.fl.fund{border-style:solid dashed;border-left-style:dashed;border-right-style:dashed}
 .fl.st-ok{color:#fff}
 .fl:hover{outline:2px solid var(--accent);outline-offset:-3px}
 .bld .pct{font:500 .7rem/1 var(--f-mono);text-align:center;color:var(--muted);padding-top:4px}
@@ -93,7 +95,7 @@ table.q thead th{vertical-align:bottom;background:var(--surface-2);font-weight:5
 table.q thead th.v span{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;display:inline-block;max-height:150px;overflow:hidden;text-overflow:ellipsis;font-family:var(--f-head);font-weight:600;font-size:.8rem}
 table.q th.b{position:sticky;left:0;background:var(--surface);z-index:1;text-align:left;font-family:var(--f-head);white-space:nowrap}
 table.q thead th.b{background:var(--surface-2)}
-.sq{display:inline-flex;gap:2px}
+.sq{display:inline-grid;grid-template-columns:repeat(var(--pr,4),auto);gap:2px}
 .sq button{width:13px;height:13px;padding:0;border:1.2px solid var(--ink);border-radius:2px}
 .sq button:hover{outline:2px solid var(--accent);outline-offset:1px}
 table.q tfoot td,table.q tfoot th{background:var(--surface-2);font-family:var(--f-mono)}
@@ -153,7 +155,7 @@ textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px soli
     <div style="display:grid;gap:12px">
       <div class="summary" id="sumMapa"></div>
       <div class="map" id="map"></div>
-      <p class="note">Toque no nome do bloco para aplicar o status aos 4 pavimentos de uma vez.</p>
+      <p class="note">Toque no nome do bloco para aplicar o status a todos os níveis do bloco de uma vez. A linha grossa marca o nível do terreno; abaixo dela ficam radier e embasamento.</p>
     </div>
   </section>
 
@@ -161,7 +163,7 @@ textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px soli
     <div style="display:grid;gap:10px">
       <div class="legend" id="legQ"></div>
       <div class="tablewrap"><table class="q" id="quadro"></table></div>
-      <p class="note">Em cada célula, os quadradinhos são, da esquerda para a direita: Térreo, 1º, 2º e 3º pavimento.</p>
+      <p class="note" id="qNote"></p>
     </div>
   </section>
 
@@ -193,6 +195,7 @@ textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px soli
       </div>
       <div class="row"><button class="primary" id="saveCfg">Salvar ajustes</button><span class="note" id="cfgMsg"></span></div>
       <p class="note">Remover um serviço da lista não apaga as marcações já feitas; se ele voltar com o mesmo nome antigo, é um serviço novo.</p>
+      <p class="note">Pavimentos são reconhecidos pelo nome: pode incluir níveis novos em qualquer posição sem perder marcações, mas renomear um pavimento já marcado zera as marcações dele.</p>
     </div>
   </section>
 </div>
@@ -206,7 +209,7 @@ const ST={ok:{nm:'Executado'},and:{nm:'Em execução'},na:{nm:'Não se aplica'},
 const DEF_SVCS=['Alvenaria','Arremates de alvenaria','Instalações elétricas (embutidas)','Instalações hidráulicas','Chapisco e reboco interno','Contrapiso','Reboco externo / fachada','Revestimento cerâmico','Forro de gesso','Esquadrias','Pintura interna','Pintura externa'];
 const rg=(a,b)=>{const o=[];for(let i=a;a>=b?i>=b:i<=b;i+=a>=b?-1:1)o.push(i);return o};
 const DEF_LAYOUT=[rg(21,16),rg(39,34),rg(33,28),rg(27,22),rg(15,11),rg(10,5),rg(4,1)];
-const DEF_CFG={obra:'',blocos:39,pavs:['Térreo','1º Pav','2º Pav','3º Pav'],servicos:DEF_SVCS.map((n,i)=>({id:'s'+(i+1),nome:n})),layout:DEF_LAYOUT};
+const DEF_CFG={obra:'',blocos:39,pavs:['Radier','Embasamento','Térreo','1º Pav','2º Pav','3º Pav'],servicos:DEF_SVCS.map((n,i)=>({id:'s'+(i+1),nome:n})),layout:DEF_LAYOUT};
 /* Fileiras do mapa (índices 0-based), validadas contra a quantidade de blocos */
 function rowsOf(){const seen=new Set(),rows=[];
   for(const r of (Array.isArray(cfg.layout)&&cfg.layout.length?cfg.layout:DEF_LAYOUT)){const row=[];for(const n of (Array.isArray(r)?r:[])){const b=+n-1;if(Number.isInteger(b)&&b>=0&&b<cfg.blocos&&!seen.has(b)){seen.add(b);row.push(b)}}if(row.length)rows.push(row)}
@@ -224,7 +227,12 @@ try{const c=JSON.parse(localStorage.getItem(LS)||'null');if(c){if(c.cfg)cfg=c.cf
 function saveLocal(){try{localStorage.setItem(LS,JSON.stringify({cfg,cells,svc,brush}))}catch(e){}}
 
 const bn=i=>String(i+1).padStart(2,'0');
-const key=(b,s,p)=>`${b}_${s}_${p}`;
+/* Pavimento identificado pelo nome (não pela posição): inserir um nível novo não desloca as marcações */
+const pslug=t=>String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[ºª°]/g,'o').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'p';
+const key=(b,s,p)=>`${b}_${s}_${pslug(cfg.pavs[p])}`;
+const shortP=p=>{const n=cfg.pavs[p]||'';const m=n.match(/^\d+/);return m?m[0]:n.charAt(0).toUpperCase()};
+const groundIdx=()=>cfg.pavs.findIndex(n=>/t[ée]rreo/i.test(n));
+const perRow=()=>{const P=cfg.pavs.length;return P>4?Math.ceil(P/2):P};
 const stOf=(b,s,p)=>cells[key(b,s,p)]?.s||'none';
 const today=()=>new Date().toISOString().slice(0,10);
 const fmtD=d=>d?d.split('-').reverse().join('/'):'';
@@ -259,7 +267,7 @@ function renderMapa(){
     let fl='';
     for(let p=P-1;p>=0;p--){const c=cells[key(b,svc,p)];const k=c?.s||'none';
       const tip=`Bloco ${bn(b)} · ${cfg.pavs[p]} · ${ST[k].nm}${c?.d?' em '+fmtD(c.d):''}`;
-      fl+=`<button class="fl st-${k}" data-b="${b}" data-p="${p}" title="${esc(tip)}" aria-label="${esc(tip)}">${p===0?'T':p}</button>`}
+      const gi=groundIdx();fl+=`<button class="fl st-${k}${p===gi?' gnd':''}${gi>0&&p<gi?' fund':''}" data-b="${b}" data-p="${p}" title="${esc(tip)}" aria-label="${esc(tip)}">${esc(shortP(p))}</button>`}
     const pc=blockPct(b,svc);
     h+=`<div class="bld${pc===100?' done':''}"><button class="nm" data-blk="${b}" title="Aplicar a todos os pavimentos do bloco ${bn(b)}">B${bn(b)}</button><div class="roof"></div>${fl}<div class="pct">${pc}%</div></div>`;
   }
@@ -272,13 +280,16 @@ function renderQuadro(){
   let h=`<thead><tr><th class="b">Bloco</th>${cfg.servicos.map((s,i)=>`<th class="v" title="${esc(s.nome)}"><span>${i+1}. ${esc(s.nome)}</span></th>`).join('')}</tr></thead><tbody>`;
   for(const [ri,row] of rowsOf().entries())for(const [ci,b] of row.entries()){
     h+=`<tr${ri&&!ci?' class="g"':''}><th class="b">Bloco ${bn(b)}</th>`;
-    for(const s of cfg.servicos){h+='<td><span class="sq">';
-      for(let p=0;p<P;p++){const c=cells[key(b,s.id,p)];const k=c?.s||'none';const tip=`Bloco ${bn(b)} · ${s.nome} · ${cfg.pavs[p]} · ${ST[k].nm}${c?.d?' em '+fmtD(c.d):''}`;
+    const PR=perRow(),ord=[];for(let r=Math.ceil(P/PR)-1;r>=0;r--)for(let c=0;c<PR;c++){const p=r*PR+c;if(p<P)ord.push(p)}
+    for(const s of cfg.servicos){h+=`<td><span class="sq" style="--pr:${PR}">`;
+      for(const p of ord){const c=cells[key(b,s.id,p)];const k=c?.s||'none';const tip=`Bloco ${bn(b)} · ${s.nome} · ${cfg.pavs[p]} · ${ST[k].nm}${c?.d?' em '+fmtD(c.d):''}`;
         h+=`<button class="st-${k}" data-b="${b}" data-s="${esc(s.id)}" data-p="${p}" title="${esc(tip)}" aria-label="${esc(tip)}"></button>`}
       h+='</span></td>'}
     h+='</tr>'}
   h+=`</tbody><tfoot><tr><th class="b">% executado</th>${cfg.servicos.map(s=>`<td>${stats(s.id).pct}%</td>`).join('')}</tr></tfoot>`;
   $('#quadro').innerHTML=h;
+  const PR=perRow(),lines=[];for(let r=Math.ceil(P/PR)-1;r>=0;r--)lines.push(cfg.pavs.slice(r*PR,r*PR+PR).join(', '));
+  $('#qNote').textContent=lines.length>1?`Em cada célula, a fileira de cima é ${lines[0]}; a de baixo, ${lines.slice(1).join('; ')} (da esquerda para a direita).`:`Em cada célula, os quadradinhos são, da esquerda para a direita: ${lines[0]}.`;
 }
 function renderAjustes(){
   if(document.activeElement?.closest?.('#v-ajustes'))return;
@@ -381,26 +392,27 @@ function pdfMapaPage(d,s,blank){
   const RW=rowsOf(),top=port?40:36,bottom=H-24,left=24,right=W-12;
   const cols=Math.max(...RW.map(r=>r.length)),rows=RW.length;
   const cw=(right-left)/cols,rh=(bottom-top)/rows;
-  const bw=Math.min(cw*.72,18),lab=5,pctH=blank?1:4,fh=Math.min((rh-lab-pctH-3)/P,11);
+  const bw=Math.min(cw*.72,18),lab=4.5,pctH=blank?1:3.5,fh=Math.min((rh-lab-pctH-2.5)/P,11),gi=groundIdx();
   for(let r=0;r<rows;r++){const y0=top+r*rh;
     d.setFontSize(7);d.setTextColor(...C.muted);
-    for(let p=0;p<P;p++){const fy=y0+lab+1.5+(P-1-p)*fh;d.text(p===0?'Térreo':cfg.pavs[p].replace(/\s*Pav.*/i,'')+' pav',left-2,fy+fh/2+1,{align:'right'})}
+    for(let p=0;p<P;p++){const fy=y0+lab+1.5+(P-1-p)*fh;d.setFontSize(Math.min(7,fh*2));d.text(cfg.pavs[p].replace(/\s*Pav(imento)?\b/i,' pav'),left-2,fy+fh/2+.9,{align:'right'})}
     for(let c=0;c<RW[r].length;c++){const b=RW[r][c];const x=left+c*cw+(cw-bw)/2;
       d.setFont('helvetica','bold');d.setFontSize(9);d.setTextColor(...C.ink);d.text('B'+bn(b),x+bw/2,y0+lab-1,{align:'center'});d.setFont('helvetica','normal');
       d.setFillColor(...C.ink);d.rect(x-.8,y0+lab,bw+1.6,1.5,'F');
       for(let p=0;p<P;p++){pdfFloor(d,x,y0+lab+1.5+(P-1-p)*fh,bw,fh,blank?'none':stOf(b,s.id,p))}
-      if(!blank){const pc=blockPct(b,s.id);d.setFontSize(7);d.setTextColor(...(pc===100?C.ok:C.muted));d.text(pc+'%',x+bw/2,y0+lab+1.5+P*fh+3.2,{align:'center'})}
+      if(gi>0){const gy=y0+lab+1.5+(P-gi)*fh;d.setDrawColor(...C.ink);d.setLineWidth(.9);d.line(x-2,gy,x+bw+2,gy);d.setLineWidth(.35)}
+      if(!blank){const pc=blockPct(b,s.id);d.setFontSize(7);d.setTextColor(...(pc===100?C.ok:C.muted));d.text(pc+'%',x+bw/2,y0+lab+1.5+P*fh+3,{align:'center'})}
     }}
   d.setDrawColor(...C.line);d.setLineWidth(.2);d.setFontSize(8);d.setTextColor(...C.muted);
   d.text('Observações / arremates pendentes:',12,H-17);d.line(62,H-17,W-12,H-17);d.line(12,H-10,W-12,H-10);
 }
 function pdfQuadro(d){
   const W=210,H=297,P=cfg.pavs.length,n=cfg.blocos,S=cfg.servicos;
-  pdfHeader(d,W,'Quadro geral de serviços',`${n} blocos · ${S.length} serviços · quadradinhos por pavimento: ${cfg.pavs.map((p,i)=>i?String(i):'T').join(' ')}`);
+  pdfHeader(d,W,'Quadro geral de serviços',`${n} blocos · ${S.length} serviços · níveis: ${cfg.pavs.map((p,i)=>shortP(i)+' = '+p).join(' · ')}`);
   pdfLegend(d,12,33);
-  const left=10,labW=16,pcW=10,top=38,headH=34,bottom=H-12;
+  const left=10,labW=16,pcW=10,top=38,headH=30,bottom=H-12;
   const colW=(W-left*2-labW-pcW)/S.length,rh=Math.min(6,(bottom-top-headH-6)/n);
-  const sq=Math.min((colW-1.5)/P-0.5,rh-1.4),gap=.5;
+  const PR=perRow(),NR=Math.ceil(P/PR),gap=.4,sq=Math.min((colW-1.5)/PR-gap,(rh-1)/NR-gap);
   d.setFontSize(7);d.setTextColor(...C.ink);
   S.forEach((s,i)=>{const x=left+labW+i*colW+colW/2+1.2;let t=(i+1)+'. '+s.nome;while(d.getTextWidth(t)>headH-2&&t.length>4)t=t.slice(0,-2);if(t!==(i+1)+'. '+s.nome)t+='…';d.text(t,x,top+headH-1,{angle:90})});
   d.setFont('helvetica','bold');d.text('% bloco',left+labW+S.length*colW+pcW/2,top+headH-1,{align:'center'});d.setFont('helvetica','normal');
@@ -411,8 +423,8 @@ function pdfQuadro(d){
     if(i%2===0){d.setFillColor(246,248,250);d.rect(left,y,W-left*2,rh,'F')}
     d.setFontSize(7.5);d.setTextColor(...C.ink);d.text('Bloco '+bn(b),left+1,y+rh/2+1.2);
     let ok=0,t=0;
-    S.forEach((s,i)=>{const cx=left+labW+i*colW+(colW-(P*sq+(P-1)*gap))/2;
-      for(let p=0;p<P;p++){const k=stOf(b,s.id,p);if(k!=='na'){t++;if(k==='ok')ok++}pdfFloor(d,cx+p*(sq+gap),y+(rh-sq)/2,sq,sq,k)}});
+    S.forEach((s,i)=>{const cx=left+labW+i*colW+(colW-(PR*sq+(PR-1)*gap))/2,cy=y+(rh-(NR*sq+(NR-1)*gap))/2;
+      for(let p=0;p<P;p++){const k=stOf(b,s.id,p);if(k!=='na'){t++;if(k==='ok')ok++}const rr=NR-1-Math.floor(p/PR);pdfFloor(d,cx+(p%PR)*(sq+gap),cy+rr*(sq+gap),sq,sq,k)}});
     d.setFontSize(7);d.setTextColor(...C.muted);d.text((t?Math.round(ok/t*100):0)+'%',left+labW+S.length*colW+pcW/2,y+rh/2+1.2,{align:'center'});
   }
   const yf=top+headH+n*rh;d.setDrawColor(...C.ink);d.setLineWidth(.3);d.line(left,yf,W-left,yf);
@@ -448,7 +460,7 @@ setSync('busy','Carregando…');
   try{db=window.claude?await claude.use('db'):null}catch(e){db=null}
   if(!db){clearTimeout(timer);setSync('slow','Sem conexão: marcações ficam só neste aparelho');return}
   try{user=await claude.use('user');const c=await user?.can?.('data.write');if(c===false){canWrite=false}}catch(e){}
-  db.doc('config/geral').onSnapshot(s=>{if(s.metadata?.fromCache&&!s.exists)return;if(s.exists){const v=s.data();if(v&&Array.isArray(v.servicos)&&Array.isArray(v.pavs))cfg={...DEF_CFG,...v}}saveLocal();render()},()=>{});
+  db.doc('config/geral').onSnapshot(s=>{if(s.metadata?.fromCache&&!s.exists)return;if(s.exists){const v=s.data();if(v&&Array.isArray(v.servicos)&&Array.isArray(v.pavs))cfg={...DEF_CFG,...v}}else if(!s.metadata?.fromCache)cfg=JSON.parse(JSON.stringify(DEF_CFG));saveLocal();render()},()=>{});
   db.collection('exec').onSnapshot(s=>{
     if(s.metadata?.fromCache&&s.empty&&Object.keys(cells).length)return;
     const n={};s.docs.forEach(x=>{const v=x.data();if(v&&v.s)n[x.id]=v});cells=n;
