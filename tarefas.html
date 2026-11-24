@@ -155,6 +155,24 @@ dialog::backdrop{background:rgba(10,15,12,.5)}
 .bulk .btn.danger{color:var(--bad)}
 .selecting .toast{bottom:calc(150px + env(safe-area-inset-bottom,0px))}
 .selecting main{padding-bottom:180px}
+.anx{display:grid;gap:8px}
+.anx-hd{display:flex;justify-content:space-between;font-size:.85rem;color:var(--muted);font-weight:500}
+.anx-use{font-weight:400;font-size:.78rem}
+.anx-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.anx-list:empty{display:none}
+.anx-it{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:8px;padding:6px;background:var(--bg);min-width:0}
+.anx-it a{display:flex;align-items:center;gap:10px;flex:1;min-width:0;color:var(--ink);text-decoration:none}
+.anx-th{flex:0 0 auto;width:44px;height:44px;border-radius:6px;object-fit:cover;background:var(--surface-2);display:grid;place-items:center;font-size:.68rem;font-weight:700;color:var(--muted);letter-spacing:.04em}
+.anx-nm{min-width:0;display:grid}
+.anx-nm b{font-weight:500;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.anx-nm small{color:var(--muted);font-size:.78rem}
+.anx-x{flex:0 0 auto;border:0;background:none;color:var(--muted);font-size:.85rem;padding:8px;border-radius:6px}
+.anx-x.sure{color:var(--surface);background:var(--bad)}
+.anx-add{justify-self:start;cursor:pointer}
+.anx-add.busy{opacity:.6;pointer-events:none}
+.anx-note{margin:0;font-size:.82rem;color:var(--muted)}
+.clip{display:inline-flex;align-items:center;gap:3px}
+.clip svg{width:13px;height:13px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-weight:500;z-index:20;display:flex;gap:14px;align-items:center;max-width:calc(100vw - 32px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .toast button{background:none;border:0;color:var(--accent-soft);font-weight:700;padding:0;text-decoration:underline}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -220,6 +238,16 @@ dialog::backdrop{background:rgba(10,15,12,.5)}
     <h2>Editar tarefa</h2>
     <label>Tarefa<textarea id="eTxt" required></textarea></label>
     <label>Observação<textarea id="eObs" placeholder="Detalhes, contato, local, o que falta…" style="min-height:70px"></textarea></label>
+    <div class="anx">
+      <div class="anx-hd"><span>Anexos</span><span id="anxUse" class="anx-use"></span></div>
+      <ul id="anxList" class="anx-list"></ul>
+      <label class="btn sm anx-add" id="anxAdd">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg>
+        <span id="anxAddTxt">Anexar foto ou arquivo</span>
+        <input type="file" id="anxIn" multiple accept="image/*,application/pdf,video/mp4,video/webm,.pdf,.csv,.txt,.md,.json" hidden>
+      </label>
+      <p id="anxNo" class="anx-note" hidden>Para anexar, abra a página logado no claude.ai.</p>
+    </div>
     <label>Lista<select id="eLista"></select></label>
     <div id="eRotLbl" class="rot-row" style="font-size:.85rem;color:var(--muted)">
       <label style="flex:1 1 120px">Frequência<select id="ePer"></select></label>
@@ -311,6 +339,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const ICON_CK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 const ICON_ST='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6L2.5 9.4l6.6-.8z"/></svg>';
 const ICON_NOTE='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4z"/><path d="M8 8h8M8 12h5"/></svg>';
+const ICON_CLIP='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg>';
 const ICON_ST_O='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6L2.5 9.4l6.6-.8z"/></svg>';
 
 let selMode=false,sel=new Set(),longFired=false;
@@ -409,6 +438,7 @@ function item(r){
   if(r.lista==='equipe'&&r.resp)meta.push(`<span class="tag r">${esc(r.resp)}</span>`);
   if(rot){meta.push(`<span class="tag st ${st.s}">${esc(st.label)}</span>`);meta.push(esc(perLabel(r)))}
   else meta.push(fe?'feito '+fmtD(r.concluido):'anotado '+fmtD(r.criado));
+  if(r.anexos&&r.anexos.length)meta.push(`<span class="clip" title="Anexos">${ICON_CLIP}${r.anexos.length}</span>`);
   return `<li class="item${r.prio&&!fe?' prio':''}${fe?' done':''}${rot&&st.s==='late'?' late':''}${sel.has(r.id)?' sel':''}" data-id="${r.id}">
     <button class="ck" data-act="ck" aria-label="${fe?'Desmarcar':'Marcar como feito'}"><span class="box">${ICON_CK}</span></button>
     <button class="body" data-act="edit" aria-label="Editar"><span class="txt">${esc(r.texto)}</span>${r.obs?`<span class="obs">${esc(r.obs)}</span>`:''}<span class="meta">${meta.join('')}</span></button>
@@ -431,7 +461,10 @@ async function remove(ids){
   const gone=rows.filter(r=>ids.includes(r.id));
   rows=rows.filter(r=>!ids.includes(r.id));saveCache();render();
   if(db){for(const id of ids){try{await db.doc('tarefas/'+id).delete()}catch(e){}}}
-  toast(gone.length===1?'Tarefa excluída':gone.length+' tarefas apagadas',async()=>{for(const r of gone)await save(r.id,strip(r))});
+  let undone=false;
+  toast(gone.length===1?'Tarefa excluída':gone.length+' tarefas apagadas',async()=>{undone=true;for(const r of gone)await save(r.id,strip(r))});
+  const files=gone.flatMap(r=>r.anexos||[]);
+  if(files.length)setTimeout(async()=>{if(undone||!assets)return;for(const a of files){try{await assets.delete(a.id)}catch(e){}}},8000);
 }
 
 /* Eventos */
@@ -535,6 +568,52 @@ $('#aDel').onclick=async()=>{
 $('#aClose').onclick=()=>$('#dlgArq').close();
 
 /* Baixar arquivo: planilha .csv que abre no Excel (separador ; e acentos preservados) */
+/* Anexos: arquivos guardados no claude.ai; a tarefa guarda só a referência */
+let assets=null;
+const ANX_TXT={csv:'text/csv',txt:'text/plain',md:'text/markdown',json:'application/json',pdf:'application/pdf'};
+const fmtSize=b=>b>=1048576?(b/1048576).toFixed(1).replace('.',',')+' MB':Math.max(1,Math.round(b/1024))+' KB';
+function anxKind(t){t=t||'';if(t.startsWith('image/'))return'img';if(t.startsWith('video/'))return'VÍD';if(t==='application/pdf')return'PDF';return(t.split('/')[1]||'ARQ').slice(0,4).toUpperCase()}
+let anxConfirm=null;
+function renderAnx(){
+  const r=editing&&rows.find(x=>x.id===editing.id)||editing;const list=(r&&r.anexos)||[];
+  $('#anxList').innerHTML=list.map(a=>{const k=anxKind(a.tipo),u='/_blob/'+a.id;
+    return `<li class="anx-it"><a href="${u}" target="_blank" rel="noopener">${k==='img'?`<img class="anx-th" src="${u}" alt="" loading="lazy">`:`<span class="anx-th">${k}</span>`}<span class="anx-nm"><b>${esc(a.nome)}</b><small>${fmtSize(a.tam||0)} · ${fmtD(a.data)}</small></span></a>${assets?`<button type="button" class="anx-x${anxConfirm===a.id?' sure':''}" data-del="${a.id}">${anxConfirm===a.id?'Remover?':'✕'}</button>`:''}</li>`}).join('');
+  $('#anxAdd').hidden=!assets;$('#anxNo').hidden=!!assets;
+}
+async function prepFile(f){
+  let type=f.type,name=f.name||'arquivo';const ext=(name.split('.').pop()||'').toLowerCase();
+  if(!type||!/^(image\/(png|jpeg|gif|webp|svg\+xml)|video\/(mp4|webm)|application\/(pdf|json)|text\/(csv|plain|markdown))$/.test(type))type=ANX_TXT[ext]||type;
+  // Fotos grandes ou em formato não aceito (ex.: HEIC) viram JPEG de até 2000 px
+  if(type.startsWith('image/')&&type!=='image/gif'&&type!=='image/svg+xml'&&(f.size>1.5e6||!/^image\/(png|jpeg|webp)$/.test(type))){
+    try{const bm=await createImageBitmap(f);const k=Math.min(1,2000/Math.max(bm.width,bm.height));const c=document.createElement('canvas');c.width=Math.round(bm.width*k);c.height=Math.round(bm.height*k);c.getContext('2d').drawImage(bm,0,0,c.width,c.height);
+      const b=await new Promise(r=>c.toBlob(r,'image/jpeg',.85));if(b){return{blob:b,type:'image/jpeg',name:name.replace(/\.[^.]+$/,'')+'.jpg'}}}catch(e){}
+  }
+  return{blob:f,type,name};
+}
+$('#anxIn').addEventListener('change',async e=>{
+  const files=[...e.target.files];e.target.value='';if(!files.length||!editing||!assets)return;
+  const id=editing.id;$('#anxAdd').classList.add('busy');let ok=0;const errs=[];
+  for(const [i,f] of files.entries()){
+    $('#anxAddTxt').textContent='Enviando '+(i+1)+' de '+files.length+'…';
+    try{const p=await prepFile(f);const res=await assets.upload(p.blob,{type:p.type});
+      const cur=rows.find(x=>x.id===id);const list=[...((cur&&cur.anexos)||[]),{id:res.id,nome:p.name,tipo:res.contentType,tam:res.sizeBytes,data:today()}];
+      await save(id,{anexos:list});ok++;renderAnx();}
+    catch(err){const c=err&&err.code;errs.push(c==='unsupported_type'?f.name+': tipo não aceito (use foto, PDF, vídeo ou texto)':c==='too_large'?f.name+': maior que 20 MB':c==='quota_or_state'?'Espaço de anexos cheio':f.name+': não foi possível enviar')}
+  }
+  $('#anxAdd').classList.remove('busy');$('#anxAddTxt').textContent='Anexar foto ou arquivo';renderAnx();
+  toast(errs.length?errs[0]+(errs.length>1?' (+'+(errs.length-1)+')':''):(ok===1?'Arquivo anexado':ok+' arquivos anexados'));
+});
+$('#anxList').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-del]');if(!b)return;e.preventDefault();
+  const aid=b.dataset.del;if(anxConfirm!==aid){anxConfirm=aid;renderAnx();return}
+  anxConfirm=null;const id=editing.id;const cur=rows.find(x=>x.id===id);
+  await save(id,{anexos:((cur&&cur.anexos)||[]).filter(a=>a.id!==aid)});renderAnx();
+  try{await assets.delete(aid)}catch(err){}
+  toast('Anexo removido');
+});
+$('#dlgEdit').addEventListener('close',()=>{anxConfirm=null});
+(async()=>{for(let i=0;i<30&&!window.claude;i++)await new Promise(r=>setTimeout(r,100));try{assets=window.claude?await claude.use('assets'):null}catch(e){assets=null}if($('#dlgEdit').open)renderAnx()})();
+
 let dl=null;
 const fmtFull=d=>d?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4):'';
 const csvCell=v=>{v=String(v??'');return /[;"\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
@@ -562,6 +641,7 @@ function openEdit(r,focusObs){
   $('#eRespLbl').hidden=r.lista!=='equipe';
   $('#eRotLbl').hidden=r.lista!=='rotina';
   $('#ePer').value=r.per||'diaria';fillDia($('#eDia'),$('#ePer').value,r.dia??1);$('#eDiaLbl').hidden=!(r.per==='semanal'||r.per==='mensal');$('#eHora').value=r.hora||'';
+  renderAnx();
   $('#dlgEdit').showModal();
   if(focusObs){const o=$('#eObs');o.focus();o.setSelectionRange(o.value.length,o.value.length)}
 }
