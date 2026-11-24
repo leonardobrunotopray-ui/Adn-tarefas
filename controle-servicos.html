@@ -73,7 +73,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .bar span{display:block;height:100%}
 
 /* Mapa de prédios */
-.map{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:14px 10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.map{display:grid;grid-template-columns:repeat(var(--cols,6),minmax(0,120px));justify-content:center;gap:14px 10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px}
 .bld{display:grid;gap:0;justify-items:stretch}
 .bld .nm{font:600 .8rem/1 var(--f-head);text-align:center;padding:4px 0 5px;border:0;background:transparent;border-radius:4px;color:var(--ink)}
 .bld .nm:hover{background:var(--accent-soft)}
@@ -118,7 +118,10 @@ table.q td.p{font-family:var(--f-mono);color:var(--muted)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:6px;font-size:.88rem;z-index:20;max-width:calc(100% - 32px)}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.82rem;color:var(--muted)}
 .legend span{display:flex;gap:6px;align-items:center}
-@media (max-width:520px){.map{grid-template-columns:repeat(4,1fr);gap:12px 8px;padding:10px}}
+@media (max-width:520px){.map{gap:12px 5px;padding:10px 8px}.fl{font-size:.6rem}}
+.map .rowsep{grid-column:1/-1;height:0;border-top:1px dashed var(--line);margin-block:-4px}
+table.q tr.g th,table.q tr.g td{border-top:2px solid var(--ink)}
+textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%;min-height:150px;font-family:var(--f-mono);resize:vertical}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 @media print{.toolbar,nav.tabs,.no-print,.toast{display:none!important}.map,.tablewrap{border:0}body{background:#fff}}
 </style>
@@ -166,8 +169,8 @@ table.q td.p{font-family:var(--f-mono);color:var(--muted)}
     <div class="panel">
       <div><h2>Folhas para a equipe</h2><p class="note" style="margin:4px 0 0">Gera um PDF em folha A4, pronto para imprimir e fixar no canteiro. O PDF mostra a situação no momento em que é gerado.</p></div>
       <div class="print-opts">
-        <div class="print-card"><div><strong>Mapa do serviço selecionado</strong><p id="pSel">A4 paisagem, 1 folha</p></div><button class="primary" data-pdf="one">Gerar PDF</button></div>
-        <div class="print-card"><div><strong>Mapa de todos os serviços</strong><p id="pAll">A4 paisagem, 1 folha por serviço</p></div><button data-pdf="all">Gerar PDF</button></div>
+        <div class="print-card"><div><strong>Mapa do serviço selecionado</strong><p id="pSel">A4, 1 folha</p></div><button class="primary" data-pdf="one">Gerar PDF</button></div>
+        <div class="print-card"><div><strong>Mapa de todos os serviços</strong><p id="pAll">A4, 1 folha por serviço</p></div><button data-pdf="all">Gerar PDF</button></div>
         <div class="print-card"><div><strong>Quadro geral</strong><p>A4 retrato, os 39 blocos × todos os serviços em uma folha</p></div><button data-pdf="quadro">Gerar PDF</button></div>
         <div class="print-card"><div><strong>Folha em branco para anotar em campo</strong><p>Mapa do serviço selecionado sem status, para o encarregado marcar à caneta</p></div><button data-pdf="blank">Gerar PDF</button></div>
       </div>
@@ -182,6 +185,7 @@ table.q td.p{font-family:var(--f-mono);color:var(--muted)}
         <div class="field"><label class="label" for="nblocos">Quantidade de blocos</label><input id="nblocos" type="number" min="1" max="200"></div>
         <div class="field"><label class="label" for="pavs">Pavimentos (de baixo para cima, separados por vírgula)</label><input id="pavs"></div>
       </div>
+      <div class="field"><label class="label" for="layout">Disposição dos blocos no mapa (uma fileira por linha, como no canteiro)</label><textarea id="layout" spellcheck="false"></textarea><span class="note">Use intervalos e números separados por vírgula, ex.: <span class="mono">21-16</span> ou <span class="mono">4, 3, 2, 1</span>. Blocos que ficarem de fora entram numa fileira extra no final.</span></div>
       <div class="field">
         <span class="label">Serviços (na ordem de execução)</span>
         <ul class="svclist" id="svclist"></ul>
@@ -200,7 +204,17 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ST={ok:{nm:'Executado'},and:{nm:'Em execução'},na:{nm:'Não se aplica'},none:{nm:'Não iniciado'}};
 const DEF_SVCS=['Alvenaria','Arremates de alvenaria','Instalações elétricas (embutidas)','Instalações hidráulicas','Chapisco e reboco interno','Contrapiso','Reboco externo / fachada','Revestimento cerâmico','Forro de gesso','Esquadrias','Pintura interna','Pintura externa'];
-const DEF_CFG={obra:'',blocos:39,pavs:['Térreo','1º Pav','2º Pav','3º Pav'],servicos:DEF_SVCS.map((n,i)=>({id:'s'+(i+1),nome:n}))};
+const rg=(a,b)=>{const o=[];for(let i=a;a>=b?i>=b:i<=b;i+=a>=b?-1:1)o.push(i);return o};
+const DEF_LAYOUT=[rg(21,16),rg(39,34),rg(33,28),rg(27,22),rg(15,11),rg(10,5),rg(4,1)];
+const DEF_CFG={obra:'',blocos:39,pavs:['Térreo','1º Pav','2º Pav','3º Pav'],servicos:DEF_SVCS.map((n,i)=>({id:'s'+(i+1),nome:n})),layout:DEF_LAYOUT};
+/* Fileiras do mapa (índices 0-based), validadas contra a quantidade de blocos */
+function rowsOf(){const seen=new Set(),rows=[];
+  for(const r of (Array.isArray(cfg.layout)&&cfg.layout.length?cfg.layout:DEF_LAYOUT)){const row=[];for(const n of (Array.isArray(r)?r:[])){const b=+n-1;if(Number.isInteger(b)&&b>=0&&b<cfg.blocos&&!seen.has(b)){seen.add(b);row.push(b)}}if(row.length)rows.push(row)}
+  const miss=[];for(let b=0;b<cfg.blocos;b++)if(!seen.has(b))miss.push(b);
+  for(let i=0;i<miss.length;i+=6)rows.push(miss.slice(i,i+6));
+  return rows}
+function parseLayout(t){return t.split(/\n|;/).map(l=>{const o=[];for(const part of l.split(',')){const m=part.trim().match(/^(\d+)\s*(?:-|a|até)\s*(\d+)$/i);if(m)o.push(...rg(+m[1],+m[2]));else if(/^\d+$/.test(part.trim()))o.push(+part.trim())}return o}).filter(r=>r.length)}
+function fmtLayout(rows){return rows.map(r=>{const parts=[];let i=0;while(i<r.length){let j=i;const d=r[i+1]-r[i];if(Math.abs(d)===1){while(j+1<r.length&&r[j+1]-r[j]===d)j++}if(j-i>=2)parts.push(r[i]+'-'+r[j]);else{for(let k=i;k<=j;k++)parts.push(String(r[k]))}i=j+1}return parts.join(', ')}).join('\n')}
 let cfg=JSON.parse(JSON.stringify(DEF_CFG));
 let cells={}; // key b_sid_p -> {s,d}
 let db=null, user=null, dl=null, canWrite=true;
@@ -239,8 +253,9 @@ function renderMapa(){
    <div><b>${st.and}</b><span class="muted">em execução</span></div>
    <div><b>${st.blk}</b><span class="muted">de ${cfg.blocos} blocos concluídos</span></div>
    <div class="bar" aria-hidden="true"><span style="width:${st.tot?st.ok/st.tot*100:0}%;background:var(--ok)"></span><span style="width:${st.tot?st.and/st.tot*100:0}%;background:var(--and)"></span></div>`;
-  let h='';
-  for(let b=0;b<cfg.blocos;b++){
+  let h='';const rows=rowsOf(),cols=Math.max(...rows.map(r=>r.length));$('#map').style.setProperty('--cols',cols);
+  rows.forEach((row,ri)=>{if(ri)h+='<div class="rowsep" aria-hidden="true"></div>';
+  for(const b of row){
     let fl='';
     for(let p=P-1;p>=0;p--){const c=cells[key(b,svc,p)];const k=c?.s||'none';
       const tip=`Bloco ${bn(b)} · ${cfg.pavs[p]} · ${ST[k].nm}${c?.d?' em '+fmtD(c.d):''}`;
@@ -248,14 +263,15 @@ function renderMapa(){
     const pc=blockPct(b,svc);
     h+=`<div class="bld${pc===100?' done':''}"><button class="nm" data-blk="${b}" title="Aplicar a todos os pavimentos do bloco ${bn(b)}">B${bn(b)}</button><div class="roof"></div>${fl}<div class="pct">${pc}%</div></div>`;
   }
+  for(let i=row.length;i<cols;i++)h+='<div aria-hidden="true"></div>'});
   $('#map').innerHTML=h;
 }
 function renderQuadro(){
   const P=cfg.pavs.length;
   $('#legQ').innerHTML=['ok','and','none','na'].map(k=>`<span><i class="sw st-${k}"></i>${ST[k].nm}</span>`).join('');
   let h=`<thead><tr><th class="b">Bloco</th>${cfg.servicos.map((s,i)=>`<th class="v" title="${esc(s.nome)}"><span>${i+1}. ${esc(s.nome)}</span></th>`).join('')}</tr></thead><tbody>`;
-  for(let b=0;b<cfg.blocos;b++){
-    h+=`<tr><th class="b">Bloco ${bn(b)}</th>`;
+  for(const [ri,row] of rowsOf().entries())for(const [ci,b] of row.entries()){
+    h+=`<tr${ri&&!ci?' class="g"':''}><th class="b">Bloco ${bn(b)}</th>`;
     for(const s of cfg.servicos){h+='<td><span class="sq">';
       for(let p=0;p<P;p++){const c=cells[key(b,s.id,p)];const k=c?.s||'none';const tip=`Bloco ${bn(b)} · ${s.nome} · ${cfg.pavs[p]} · ${ST[k].nm}${c?.d?' em '+fmtD(c.d):''}`;
         h+=`<button class="st-${k}" data-b="${b}" data-s="${esc(s.id)}" data-p="${p}" title="${esc(tip)}" aria-label="${esc(tip)}"></button>`}
@@ -266,7 +282,7 @@ function renderQuadro(){
 }
 function renderAjustes(){
   if(document.activeElement?.closest?.('#v-ajustes'))return;
-  $('#obra').value=cfg.obra||'';$('#nblocos').value=cfg.blocos;$('#pavs').value=cfg.pavs.join(', ');
+  $('#obra').value=cfg.obra||'';$('#nblocos').value=cfg.blocos;$('#pavs').value=cfg.pavs.join(', ');$('#layout').value=fmtLayout(rowsOf().map(r=>r.map(b=>b+1)));
   draft=cfg.servicos.map(s=>({...s}));renderSvcList();
 }
 let draft=[];
@@ -285,7 +301,7 @@ function render(){
   $('#svcPickWrap').hidden=view==='quadro';
   $$('.view').forEach(v=>v.hidden=v.id!=='v-'+view);
   $$('nav.tabs a').forEach(a=>{if(a.dataset.v===view)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
-  const s=cfg.servicos.find(x=>x.id===svc);$('#pSel').textContent=`A4 paisagem, 1 folha · ${s?s.nome:'nenhum serviço'}`;$('#pAll').textContent=`A4 paisagem, ${cfg.servicos.length} folhas (1 por serviço)`;
+  const s=cfg.servicos.find(x=>x.id===svc);$('#pSel').textContent=`A4, 1 folha · ${s?s.nome:'nenhum serviço'}`;$('#pAll').textContent=`A4, ${cfg.servicos.length} folhas (1 por serviço)`;
   $('#undo').disabled=!lastUndo;
   if(view==='mapa')renderMapa();if(view==='quadro')renderQuadro();if(view==='ajustes')renderAjustes();
 }
@@ -327,7 +343,8 @@ $('#saveCfg').onclick=async()=>{
   const sv=draft.map(s=>({id:s.id,nome:s.nome.trim()})).filter(s=>s.nome);
   if(!pv.length){$('#cfgMsg').textContent='Informe ao menos um pavimento.';return}
   if(!sv.length){$('#cfgMsg').textContent='Informe ao menos um serviço.';return}
-  cfg={obra:$('#obra').value.trim(),blocos:nb,pavs:pv,servicos:sv};saveLocal();
+  const lay=parseLayout($('#layout').value);
+  cfg={obra:$('#obra').value.trim(),blocos:nb,pavs:pv,servicos:sv,layout:lay.length?lay:DEF_LAYOUT};saveLocal();
   if(db&&canWrite){try{await db.doc('config/geral').set(cfg);$('#cfgMsg').textContent='Ajustes salvos para toda a equipe.'}catch(e){$('#cfgMsg').textContent='Não foi possível salvar: '+(e?.message||e?.code)}}
   else $('#cfgMsg').textContent='Salvo só neste aparelho (sem conexão ou sem permissão de edição).';
   document.activeElement?.blur();render();
@@ -357,18 +374,18 @@ function pdfHeader(d,W,title,sub){
   d.text(ts,W-12,13,{align:'right'});
 }
 function pdfMapaPage(d,s,blank){
-  const W=297,H=210,P=cfg.pavs.length,n=cfg.blocos;
+  const W=d.internal.pageSize.getWidth(),H=d.internal.pageSize.getHeight(),P=cfg.pavs.length,n=cfg.blocos,port=H>W;
   const st=blank?null:stats(s.id);
   pdfHeader(d,W,s.nome,blank?'Folha de campo: pinte cada andar à caneta conforme a legenda.':`${st.pct}% executado · ${st.ok} de ${st.tot} pavimentos · ${st.and} em execução · ${st.blk} de ${n} blocos concluídos`);
-  const lx=W-12-110;pdfLegend(d,lx+4,26);
-  const top=36,bottom=H-24,left=24,right=W-12;
-  const cols=Math.min(n,13),rows=Math.ceil(n/cols);
+  if(port)pdfLegend(d,12,34);else pdfLegend(d,W-12-106,26);
+  const RW=rowsOf(),top=port?40:36,bottom=H-24,left=24,right=W-12;
+  const cols=Math.max(...RW.map(r=>r.length)),rows=RW.length;
   const cw=(right-left)/cols,rh=(bottom-top)/rows;
-  const bw=Math.min(cw*.72,18),lab=5,pctH=blank?1:4,fh=Math.min((rh-lab-pctH-5)/P,11);
+  const bw=Math.min(cw*.72,18),lab=5,pctH=blank?1:4,fh=Math.min((rh-lab-pctH-3)/P,11);
   for(let r=0;r<rows;r++){const y0=top+r*rh;
     d.setFontSize(7);d.setTextColor(...C.muted);
     for(let p=0;p<P;p++){const fy=y0+lab+1.5+(P-1-p)*fh;d.text(p===0?'Térreo':cfg.pavs[p].replace(/\s*Pav.*/i,'')+' pav',left-2,fy+fh/2+1,{align:'right'})}
-    for(let c=0;c<cols;c++){const b=r*cols+c;if(b>=n)break;const x=left+c*cw+(cw-bw)/2;
+    for(let c=0;c<RW[r].length;c++){const b=RW[r][c];const x=left+c*cw+(cw-bw)/2;
       d.setFont('helvetica','bold');d.setFontSize(9);d.setTextColor(...C.ink);d.text('B'+bn(b),x+bw/2,y0+lab-1,{align:'center'});d.setFont('helvetica','normal');
       d.setFillColor(...C.ink);d.rect(x-.8,y0+lab,bw+1.6,1.5,'F');
       for(let p=0;p<P;p++){pdfFloor(d,x,y0+lab+1.5+(P-1-p)*fh,bw,fh,blank?'none':stOf(b,s.id,p))}
@@ -388,8 +405,10 @@ function pdfQuadro(d){
   S.forEach((s,i)=>{const x=left+labW+i*colW+colW/2+1.2;let t=(i+1)+'. '+s.nome;while(d.getTextWidth(t)>headH-2&&t.length>4)t=t.slice(0,-2);if(t!==(i+1)+'. '+s.nome)t+='…';d.text(t,x,top+headH-1,{angle:90})});
   d.setFont('helvetica','bold');d.text('% bloco',left+labW+S.length*colW+pcW/2,top+headH-1,{align:'center'});d.setFont('helvetica','normal');
   d.setDrawColor(...C.line);d.setLineWidth(.15);
-  for(let b=0;b<n;b++){const y=top+headH+b*rh;
-    if(b%2===0){d.setFillColor(246,248,250);d.rect(left,y,W-left*2,rh,'F')}
+  const ORD=rowsOf().flatMap((r,ri)=>r.map((b,ci)=>[b,ri&&!ci]));
+  for(let i=0;i<n;i++){const [b,grp]=ORD[i];const y=top+headH+i*rh;
+    if(grp){d.setDrawColor(...C.ink);d.setLineWidth(.4);d.line(left,y,W-left,y);d.setDrawColor(...C.line);d.setLineWidth(.15)}
+    if(i%2===0){d.setFillColor(246,248,250);d.rect(left,y,W-left*2,rh,'F')}
     d.setFontSize(7.5);d.setTextColor(...C.ink);d.text('Bloco '+bn(b),left+1,y+rh/2+1.2);
     let ok=0,t=0;
     S.forEach((s,i)=>{const cx=left+labW+i*colW+(colW-(P*sq+(P-1)*gap))/2;
@@ -407,9 +426,9 @@ async function makePdf(kind,btn){
   const {jsPDF}=window.jspdf;let d,name;const stamp=today();
   const s=cfg.servicos.find(x=>x.id===svc);
   if(kind==='quadro'){d=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});pdfQuadro(d);name=`quadro-geral-${stamp}.pdf`}
-  else{d=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  else{const RW=rowsOf(),ori=RW.length>Math.max(...RW.map(r=>r.length))*0.9?'portrait':'landscape';d=new jsPDF({orientation:ori,unit:'mm',format:'a4'});
     const list=kind==='all'?cfg.servicos:[s];if(!list[0]){msg.textContent='Escolha um serviço primeiro.';return}
-    list.forEach((x,i)=>{if(i)d.addPage('a4','landscape');pdfMapaPage(d,x,kind==='blank')});
+    list.forEach((x,i)=>{if(i)d.addPage('a4',ori);pdfMapaPage(d,x,kind==='blank')});
     const slug=t=>t.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
     name=kind==='all'?`mapas-todos-servicos-${stamp}.pdf`:kind==='blank'?`folha-campo-${slug(s.nome)}.pdf`:`mapa-${slug(s.nome)}-${stamp}.pdf`}
   const data=new Uint8Array(d.output('arraybuffer'));
