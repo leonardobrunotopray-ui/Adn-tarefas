@@ -84,6 +84,14 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .fl.fund{border-style:solid dashed;border-left-style:dashed;border-right-style:dashed}
 .fl.st-ok{color:#fff}
 .fl:hover{outline:2px solid var(--accent);outline-offset:-3px}
+.selbar{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;background:var(--accent-soft);border:1px solid var(--accent);border-radius:6px;padding:8px 10px}
+.selbar #selCount{font-weight:500;margin-right:4px}
+.selq{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-left:auto}
+.selq button{padding:4px 8px;font-size:.8rem}
+.fl.sel{box-shadow:inset 0 0 0 3px var(--accent),inset 0 0 0 5px var(--surface);outline:none}
+.sq button.sel{outline:2.5px solid var(--accent);outline-offset:1px}
+body.selmode .fl,body.selmode .sq button{cursor:cell}
+#selMode[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .bld .pct{font:500 .7rem/1 var(--f-mono);text-align:center;color:var(--muted);padding-top:4px}
 .bld.done .pct{color:var(--ok);font-weight:600}
 
@@ -148,7 +156,14 @@ textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px soli
   <div class="toolbar" id="toolbar">
     <div class="svc-pick" id="svcPickWrap"><label class="label" for="svc">Serviço</label><select id="svc"></select></div>
     <div class="brush" role="group" aria-label="Status a aplicar" id="brush"></div>
+    <button id="selMode" aria-pressed="false" title="Marque vários andares e aplique o status de uma vez">Selecionar vários</button>
     <button class="ghost" id="undo" disabled>Desfazer</button>
+    <div class="selbar" id="selBar" hidden>
+      <span id="selCount" class="mono">0 selecionados</span>
+      <button class="primary" id="selApply" disabled>Aplicar</button>
+      <button id="selClear">Limpar seleção</button>
+      <span class="selq" id="selQuick"></span>
+    </div>
   </div>
 
   <section id="v-mapa" class="view">
@@ -222,6 +237,7 @@ let cfg=JSON.parse(JSON.stringify(DEF_CFG));
 let cells={}; // key b_sid_p -> {s,d}
 let db=null, user=null, dl=null, canWrite=true;
 let brush='ok', svc=null, view='mapa', lastUndo=null;
+let selMode=false; const selSet=new Set(); const sk=(b,s,p)=>`${b}|${s}|${p}`;
 const LS='mapa-servicos-v1';
 try{const c=JSON.parse(localStorage.getItem(LS)||'null');if(c){if(c.cfg)cfg=c.cfg;if(c.cells)cells=c.cells;if(c.svc)svc=c.svc;if(c.brush)brush=c.brush}}catch(e){}
 function saveLocal(){try{localStorage.setItem(LS,JSON.stringify({cfg,cells,svc,brush}))}catch(e){}}
@@ -267,7 +283,7 @@ function renderMapa(){
     let fl='';
     for(let p=P-1;p>=0;p--){const c=cells[key(b,svc,p)];const k=c?.s||'none';
       const tip=`Bloco ${bn(b)} · ${cfg.pavs[p]} · ${ST[k].nm}${c?.d?' em '+fmtD(c.d):''}`;
-      const gi=groundIdx();fl+=`<button class="fl st-${k}${p===gi?' gnd':''}${gi>0&&p<gi?' fund':''}" data-b="${b}" data-p="${p}" title="${esc(tip)}" aria-label="${esc(tip)}">${esc(shortP(p))}</button>`}
+      const gi=groundIdx();fl+=`<button class="fl st-${k}${p===gi?' gnd':''}${gi>0&&p<gi?' fund':''}${selSet.has(sk(b,svc,p))?' sel':''}" data-b="${b}" data-p="${p}" title="${esc(tip)}" aria-label="${esc(tip)}">${esc(shortP(p))}</button>`}
     const pc=blockPct(b,svc);
     h+=`<div class="bld${pc===100?' done':''}"><button class="nm" data-blk="${b}" title="Aplicar a todos os pavimentos do bloco ${bn(b)}">B${bn(b)}</button><div class="roof"></div>${fl}<div class="pct">${pc}%</div></div>`;
   }
@@ -283,7 +299,7 @@ function renderQuadro(){
     const PR=perRow(),ord=[];for(let r=Math.ceil(P/PR)-1;r>=0;r--)for(let c=0;c<PR;c++){const p=r*PR+c;if(p<P)ord.push(p)}
     for(const s of cfg.servicos){h+=`<td><span class="sq" style="--pr:${PR}">`;
       for(const p of ord){const c=cells[key(b,s.id,p)];const k=c?.s||'none';const tip=`Bloco ${bn(b)} · ${s.nome} · ${cfg.pavs[p]} · ${ST[k].nm}${c?.d?' em '+fmtD(c.d):''}`;
-        h+=`<button class="st-${k}" data-b="${b}" data-s="${esc(s.id)}" data-p="${p}" title="${esc(tip)}" aria-label="${esc(tip)}"></button>`}
+        h+=`<button class="st-${k}${selSet.has(sk(b,s.id,p))?' sel':''}" data-b="${b}" data-s="${esc(s.id)}" data-p="${p}" title="${esc(tip)}" aria-label="${esc(tip)}"></button>`}
       h+='</span></td>'}
     h+='</tr>'}
   h+=`</tbody><tfoot><tr><th class="b">% executado</th>${cfg.servicos.map(s=>`<td>${stats(s.id).pct}%</td>`).join('')}</tr></tfoot>`;
@@ -308,7 +324,8 @@ function render(){
   $('#sub').textContent=`${cfg.blocos} blocos · ${cfg.pavs.join(', ')} · ${cfg.servicos.length} serviços. Escolha o status no pincel e toque nos andares.`;
   renderSvcSelect();renderBrush();
   $('#toolbar').hidden=!(view==='mapa'||view==='quadro'||view==='imprimir');
-  $('#brush').hidden=$('#undo').hidden=view==='imprimir';
+  $('#brush').hidden=$('#undo').hidden=$('#selMode').hidden=view==='imprimir';
+  renderSel();
   $('#svcPickWrap').hidden=view==='quadro';
   $$('.view').forEach(v=>v.hidden=v.id!=='v-'+view);
   $$('nav.tabs a').forEach(a=>{if(a.dataset.v===view)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
@@ -330,15 +347,47 @@ async function paint(list){ // list of [b,sid,p]
 }
 async function push(writes){
   if(!db)return;
-  try{for(const [k,v] of writes){const ref=db.collection('exec').doc(k);if(v)await ref.set(v);else await ref.delete()}}
+  try{await Promise.all(writes.map(([k,v])=>{const ref=db.collection('exec').doc(k);return v?ref.set(v):ref.delete()}))}
   catch(e){toast('Não foi possível salvar: '+(e?.message||e?.code||'erro'));}
 }
 $('#undo').onclick=async()=>{if(!lastUndo)return;const w=[];for(const [k,v] of lastUndo){if(v)cells[k]=v;else delete cells[k];w.push([k,v])}lastUndo=null;saveLocal();render();await push(w);toast('Desfeito')};
-$('#brush').onclick=e=>{const b=e.target.closest('button[data-b]');if(!b)return;brush=b.dataset.b;saveLocal();renderBrush()};
-$('#svc').onchange=e=>{svc=e.target.value;saveLocal();render()};
-$('#map').onclick=e=>{const f=e.target.closest('.fl');if(f)return paint([[f.dataset.b,svc,f.dataset.p]]);
-  const n=e.target.closest('.nm');if(n)paint(cfg.pavs.map((_,p)=>[n.dataset.blk,svc,p]))};
-$('#quadro').onclick=e=>{const c=e.target.closest('button[data-s]');if(c)paint([[c.dataset.b,c.dataset.s,c.dataset.p]])};
+$('#brush').onclick=e=>{const b=e.target.closest('button[data-b]');if(!b)return;brush=b.dataset.b;saveLocal();renderBrush();renderSel()};
+$('#svc').onchange=e=>{svc=e.target.value;selSet.clear();saveLocal();render()};
+/* ---------- Seleção múltipla ---------- */
+function renderSel(){
+  document.body.classList.toggle('selmode',selMode);
+  $('#selMode').setAttribute('aria-pressed',selMode);
+  $('#selBar').hidden=!selMode||view==='imprimir';
+  const n=selSet.size;$('#selCount').textContent=n===1?'1 selecionado':`${n} selecionados`;
+  $('#selApply').disabled=!n;$('#selApply').textContent=`Aplicar “${ST[brush].nm}”${n?' aos '+n:''}`;
+  $('#selQuick').innerHTML=view==='mapa'?'<span class="label">Selecionar em todos os blocos:</span>'+cfg.pavs.map((nm,p)=>`<button data-lv="${p}">${esc(nm)}</button>`).join('')+'<button data-lv="all">Tudo</button>':'';
+}
+function elId(el){return el.classList.contains('fl')?[el.dataset.b,svc,el.dataset.p]:[el.dataset.b,el.dataset.s,el.dataset.p]}
+function setSel(el,on){const id=sk(...elId(el));if(on)selSet.add(id);else selSet.delete(id);el.classList.toggle('sel',on)}
+let drag=null,skipClick=false;
+function selCount(){renderSel()}
+function onCell(el){ // clique/toque em um andar
+  if(selMode){setSel(el,!el.classList.contains('sel'));selCount();return}
+  paint([elId(el)]);
+}
+for(const root of ['#map','#quadro']){
+  $(root).addEventListener('pointerdown',e=>{if(!selMode||e.pointerType!=='mouse'||e.button!==0)return;const el=e.target.closest('.fl,button[data-s]');if(!el)return;
+    e.preventDefault();drag=!el.classList.contains('sel');setSel(el,drag);skipClick=true;selCount()});
+  $(root).addEventListener('pointerover',e=>{if(drag===null)return;const el=e.target.closest('.fl,button[data-s]');if(el&&el.classList.contains('sel')!==drag){setSel(el,drag);selCount()}});
+}
+window.addEventListener('pointerup',()=>{drag=null});
+$('#map').onclick=e=>{const f=e.target.closest('.fl');if(f){if(skipClick){skipClick=false;return}return onCell(f)}
+  const n=e.target.closest('.nm');if(!n)return;
+  if(selMode){const ids=cfg.pavs.map((_,p)=>sk(n.dataset.blk,svc,p));const all=ids.every(i=>selSet.has(i));ids.forEach(i=>all?selSet.delete(i):selSet.add(i));renderMapa();renderSel();return}
+  paint(cfg.pavs.map((_,p)=>[n.dataset.blk,svc,p]))};
+$('#quadro').onclick=e=>{const c=e.target.closest('button[data-s]');if(!c)return;if(skipClick){skipClick=false;return}onCell(c)};
+$('#selMode').onclick=()=>{selMode=!selMode;if(!selMode)selSet.clear();render();if(selMode)toast('Toque nos andares para selecionar; depois escolha o status e toque em Aplicar.')};
+$('#selClear').onclick=()=>{selSet.clear();render()};
+$('#selQuick').onclick=e=>{const b=e.target.closest('button[data-lv]');if(!b||!svc)return;
+  const lv=b.dataset.lv==='all'?cfg.pavs.map((_,p)=>p):[+b.dataset.lv];const ids=[];
+  for(let bl=0;bl<cfg.blocos;bl++)for(const p of lv)ids.push(sk(bl,svc,p));
+  const all=ids.every(i=>selSet.has(i));ids.forEach(i=>all?selSet.delete(i):selSet.add(i));render()};
+$('#selApply').onclick=async()=>{if(!selSet.size)return;const list=[...selSet].map(x=>x.split('|'));const n=list.length;selSet.clear();await paint(list);render();toast(`“${ST[brush].nm}” aplicado a ${n} ${n===1?'andar':'andares'}. Use Desfazer se errou.`)};
 
 /* ---------- Ajustes ---------- */
 $('#svclist').oninput=e=>{const i=e.target.dataset.i;if(i!=null)draft[i].nome=e.target.value};
