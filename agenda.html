@@ -1,0 +1,872 @@
+<title>Agenda ADN</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: calendário à esquerda (mês / semana / lista), coluna lateral com o dia escolhido e a fila de sugestões lidas dos e-mails. */
+:root{
+  --bg:#eef1f4; --surface:#ffffff; --surface-2:#f6f8fa; --ink:#16202a; --muted:#5a6774; --line:#d6dce3;
+  --accent:#1c5d8f; --accent-soft:#e3eef7; --accent-ink:#ffffff;
+  --mine:#2c7a4b; --mine-soft:#e2f2e8;
+  --mail:#a86c12; --mail-soft:#fbf0dc;
+  --hol:#7a5aa8; --hol-soft:#efe9f7;
+  --bad:#b83227; --bad-soft:#fae4e1;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-head:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --r:8px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1318; --surface:#161e26; --surface-2:#1c252e; --ink:#e4eaf0; --muted:#93a0ad; --line:#2a3541;
+  --accent:#62a6da; --accent-soft:#1b3347; --accent-ink:#0b1620;
+  --mine:#5cc08a; --mine-soft:#173326; --mail:#e3aa4c; --mail-soft:#3a2c13;
+  --hol:#b59ae0; --hol-soft:#2a2238; --bad:#f0776a; --bad-soft:#3d1c19; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1318; --surface:#161e26; --surface-2:#1c252e; --ink:#e4eaf0; --muted:#93a0ad; --line:#2a3541;
+  --accent:#62a6da; --accent-soft:#1b3347; --accent-ink:#0b1620;
+  --mine:#5cc08a; --mine-soft:#173326; --mail:#e3aa4c; --mail-soft:#3a2c13;
+  --hol:#b59ae0; --hol-soft:#2a2238; --bad:#f0776a; --bad-soft:#3d1c19; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45}
+.wrap{max-width:1280px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:16px}
+h1,h2,h3{font-family:var(--f-head);font-weight:600;text-wrap:balance;margin:0}
+h1{font-size:1.65rem;letter-spacing:-.01em}
+h2{font-size:1.1rem}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.label{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:500}
+
+button{font:inherit;font-weight:500;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:7px 12px;cursor:pointer;line-height:1.2}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.primary:hover{filter:brightness(1.08)}
+button.ghost{background:transparent;border-color:transparent;color:var(--accent);padding-inline:8px}
+button.ghost:hover{background:var(--accent-soft)}
+button.danger{color:var(--bad);border-color:var(--bad);background:transparent}
+button:disabled{opacity:.55;cursor:not-allowed}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}
+textarea{resize:vertical;min-height:64px}
+a{color:var(--accent)}
+
+/* Cabeçalho */
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+header.top p{margin:4px 0 0;color:var(--muted);max-width:64ch}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.nav{display:flex;gap:6px;align-items:center}
+.nav h2{font-size:1.3rem;min-width:11ch;text-transform:capitalize}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;border-radius:0;border-right:1px solid var(--line);background:transparent}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.8rem;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+.sw.o{background:var(--accent)} .sw.m{background:var(--mine)} .sw.s{border:1.5px dashed var(--mail)} .sw.h{background:var(--hol)}
+.status{font-size:.82rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.status .dot{width:8px;height:8px;border-radius:50%;background:var(--line);display:inline-block}
+.status.ok .dot{background:var(--mine)} .status.err .dot{background:var(--bad)} .status.load .dot{background:var(--mail)}
+.status.err{color:var(--bad)}
+
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+@media (max-width:960px){.layout{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+
+/* Mês */
+.dow{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-bottom:1px solid var(--line)}
+.dow div{padding:8px 8px 6px;font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:500}
+.month{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.cell{min-height:112px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:4px 4px 6px;display:flex;flex-direction:column;gap:3px;cursor:pointer;min-width:0}
+.cell:nth-child(7n){border-right:0}
+.cell:nth-last-child(-n+7){border-bottom:0}
+.cell:hover{background:var(--surface-2)}
+.cell.out{background:var(--surface-2)}
+.cell.out .dn{color:var(--muted)}
+.cell.sel{box-shadow:inset 0 0 0 2px var(--accent)}
+.dn{font-family:var(--f-mono);font-size:.8rem;align-self:flex-start;padding:1px 6px;border-radius:999px}
+.cell.today .dn{background:var(--accent);color:var(--accent-ink)}
+.more{font-size:.72rem;color:var(--muted);padding-left:4px}
+.dots{display:none;gap:3px;flex-wrap:wrap;padding-left:4px}
+.dots i{width:7px;height:7px;border-radius:50%}
+
+.chip{display:flex;gap:5px;align-items:baseline;width:100%;text-align:left;font-size:.76rem;font-weight:500;padding:2px 6px;border-radius:4px;border:1px solid transparent;line-height:1.3;min-width:0}
+.chip .t{font-family:var(--f-mono);font-size:.7rem;font-weight:400;flex:none}
+.chip .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.chip.outlook{background:var(--accent-soft);color:var(--accent)}
+.chip.mine{background:var(--mine-soft);color:var(--mine)}
+.chip.sug{background:transparent;border:1.5px dashed var(--mail);color:var(--mail)}
+.chip.hol{background:var(--hol-soft);color:var(--hol);cursor:default}
+.chip.tent{opacity:.75}
+.chip:hover{border-color:currentColor}
+.chip.hol:hover{border-color:transparent}
+
+@media (max-width:640px){
+  .cell{min-height:58px}
+  .cell .chip,.cell .more{display:none}
+  .dots{display:flex}
+}
+.dots i.outlook{background:var(--accent)} .dots i.mine{background:var(--mine)} .dots i.sug{border:1.5px solid var(--mail)} .dots i.hol{background:var(--hol)}
+
+/* Semana */
+.week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.wcol{border-right:1px solid var(--line);min-height:340px;padding:8px 6px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.wcol:last-child{border-right:0}
+.wcol h3{font-size:.85rem;font-weight:500;color:var(--muted);display:flex;gap:6px;align-items:baseline;cursor:pointer;margin-bottom:4px}
+.wcol h3 b{font-family:var(--f-mono);font-size:1.15rem;color:var(--ink);font-weight:500}
+.wcol.today h3 b{color:var(--accent)}
+.wcol.sel{background:var(--surface-2)}
+.wcol .chip{flex-direction:column;gap:0;white-space:normal}
+.wcol .chip .n{white-space:normal}
+@media (max-width:760px){
+  .week{grid-template-columns:minmax(0,1fr)}
+  .wcol{border-right:0;border-bottom:1px solid var(--line);min-height:0}
+  .wcol:last-child{border-bottom:0}
+  .wcol .chip{flex-direction:row;gap:6px}
+}
+
+/* Lista */
+.list{display:grid}
+.lday{display:grid;grid-template-columns:110px minmax(0,1fr);gap:12px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.lday:last-child{border-bottom:0}
+.lday .d{font-family:var(--f-head);font-weight:600}
+.lday .d small{display:block;font-family:var(--f-body);font-weight:400;color:var(--muted);font-size:.8rem}
+.lday.today .d{color:var(--accent)}
+.empty{padding:28px 16px;color:var(--muted);text-align:center}
+@media (max-width:520px){.lday{grid-template-columns:minmax(0,1fr);gap:6px}}
+
+/* Itens (lista, painel do dia) */
+.items{display:grid;gap:6px}
+.item{display:grid;grid-template-columns:52px minmax(0,1fr);gap:10px;align-items:start;text-align:left;width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--line);background:var(--surface);border-left-width:4px}
+.item.outlook{border-left-color:var(--accent)}
+.item.mine{border-left-color:var(--mine)}
+.item.sug{border-left-color:var(--mail);border-style:dashed;border-left-style:solid}
+.item.hol{border-left-color:var(--hol);cursor:default}
+.item .tm{font-family:var(--f-mono);font-size:.78rem;color:var(--muted);line-height:1.5}
+.item .ti{font-weight:500;overflow-wrap:anywhere}
+.item .sub{font-size:.78rem;color:var(--muted);overflow-wrap:anywhere}
+.item.tent .ti{font-style:italic}
+
+/* Lateral */
+aside{display:grid;gap:16px}
+.side{padding:14px;display:grid;gap:12px}
+.side-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.count{font-family:var(--f-mono);font-size:.8rem;background:var(--mail-soft);color:var(--mail);padding:1px 8px;border-radius:999px}
+.scan{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.scan select{width:auto;flex:1 1 140px}
+.scanmsg{font-size:.82rem;color:var(--muted);min-height:1.2em;overflow-wrap:anywhere}
+.scanmsg.err{color:var(--bad)}
+.sug-list{display:grid;gap:10px}
+.sug-card{border:1.5px dashed var(--mail);border-radius:var(--r);padding:10px 12px;display:grid;gap:6px;background:var(--surface)}
+.sug-card .when{font-family:var(--f-mono);font-size:.8rem;color:var(--mail);display:flex;gap:8px;flex-wrap:wrap;align-items:baseline}
+.sug-card .ti{font-weight:600;font-family:var(--f-head);font-size:1rem;overflow-wrap:anywhere}
+.sug-card .from{font-size:.78rem;color:var(--muted);overflow-wrap:anywhere}
+.sug-card blockquote{margin:0;padding:4px 0 4px 10px;border-left:2px solid var(--line);font-size:.82rem;color:var(--muted);overflow-wrap:anywhere}
+.sug-card .acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.conf{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;padding:1px 6px;border-radius:999px;background:var(--mail-soft);color:var(--mail)}
+.conf.baixa{background:var(--surface-2);color:var(--muted)}
+.note{font-size:.8rem;color:var(--muted)}
+
+/* Diálogos */
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);padding:0;width:min(520px,calc(100vw - 32px));max-height:calc(100dvh - 32px)}
+dialog::backdrop{background:rgba(10,16,22,.45)}
+.dlg{padding:18px;display:grid;gap:12px}
+.dlg h2{font-size:1.25rem;overflow-wrap:anywhere}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.fld{display:grid;gap:4px}
+.fld>span{font-size:.78rem;color:var(--muted);font-weight:500}
+.check{display:flex;gap:8px;align-items:center}
+.check input{width:auto}
+.dlg-acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;align-items:center}
+.dlg-acts .sp{flex:1}
+.msg{font-size:.85rem}
+.msg.err{color:var(--bad)}
+.kv{display:grid;grid-template-columns:90px minmax(0,1fr);gap:4px 10px;font-size:.9rem}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;overflow-wrap:anywhere}
+.pre{white-space:pre-wrap;font-size:.82rem;color:var(--muted);max-height:180px;overflow:auto;background:var(--surface-2);border-radius:6px;padding:8px;overflow-wrap:anywhere}
+
+@media (prefers-reduced-motion:no-preference){.chip,.cell,button{transition:background-color .12s,border-color .12s}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Agenda</h1>
+      <p>Seus compromissos do Outlook, os que você anota aqui e os que o Claude encontra nos seus e-mails. Sugestões dos e-mails só entram na agenda depois que você confirma.</p>
+    </div>
+    <div class="legend" aria-label="Legenda">
+      <span><i class="sw o"></i>Outlook</span>
+      <span><i class="sw m"></i>Minha agenda</span>
+      <span><i class="sw s"></i>Sugestão de e-mail</span>
+      <span><i class="sw h"></i>Feriado</span>
+    </div>
+  </header>
+
+  <div class="bar">
+    <div class="nav">
+      <button id="prev" aria-label="Anterior">‹</button>
+      <button id="today">Hoje</button>
+      <button id="next" aria-label="Próximo">›</button>
+      <h2 id="period"></h2>
+    </div>
+    <div class="seg" role="group" aria-label="Visualização">
+      <button id="v-month" aria-pressed="true">Mês</button>
+      <button id="v-week" aria-pressed="false">Semana</button>
+      <button id="v-list" aria-pressed="false">Lista</button>
+    </div>
+  </div>
+  <div class="status" id="ostatus"><i class="dot"></i><span id="ostatus-t">Conectando ao Outlook…</span><button class="ghost" id="o-allow" hidden>Permitir Outlook</button><button class="ghost" id="o-retry" hidden>Tentar de novo</button></div>
+
+  <div class="layout">
+    <main class="panel" id="cal" aria-live="polite"></main>
+    <aside>
+      <section class="panel side" aria-labelledby="day-h">
+        <div class="side-h"><h2 id="day-h"></h2><button class="primary" id="add-day">+ Compromisso</button></div>
+        <div class="items" id="day-items"></div>
+      </section>
+      <section class="panel side" aria-labelledby="sug-h">
+        <div class="side-h"><h2 id="sug-h">Sugestões dos e-mails</h2><span class="count" id="sug-count">0</span></div>
+        <div class="scan">
+          <select id="scan-days" aria-label="Período de e-mails">
+            <option value="2">Últimos 2 dias</option>
+            <option value="7" selected>Últimos 7 dias</option>
+            <option value="14">Últimos 14 dias</option>
+            <option value="30">Últimos 30 dias</option>
+          </select>
+          <button class="primary" id="scan-go">Ler e-mails</button>
+          <button id="scan-stop" hidden>Parar</button>
+        </div>
+        <div class="scanmsg" id="scan-msg">O Claude lê os e-mails recebidos no período, procura reuniões, visitas, entregas e prazos, e coloca cada um aqui para você aprovar.</div>
+        <div class="sug-list" id="sug-list"></div>
+        <p class="note" id="store-note"></p>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<dialog id="dlg-ev">
+  <form class="dlg" id="ev-form" method="dialog">
+    <h2 id="ev-h">Novo compromisso</h2>
+    <p class="note" id="ev-src" hidden></p>
+    <label class="fld"><span>Título</span><input id="f-title" required maxlength="200"></label>
+    <div class="row">
+      <label class="fld"><span>Data</span><input type="date" id="f-date" required></label>
+      <label class="fld"><span>Início</span><input type="time" id="f-start"></label>
+      <label class="fld"><span>Fim</span><input type="time" id="f-end"></label>
+    </div>
+    <label class="check"><input type="checkbox" id="f-allday"> Dia inteiro (prazo, vencimento)</label>
+    <label class="fld"><span>Local</span><input id="f-loc" maxlength="300"></label>
+    <label class="fld"><span>Anotações</span><textarea id="f-notes" maxlength="4000"></textarea></label>
+    <label class="check" id="f-outlook-wrap"><input type="checkbox" id="f-outlook"> Criar também no meu calendário do Outlook</label>
+    <p class="msg" id="ev-msg"></p>
+    <div class="dlg-acts">
+      <button type="button" class="danger" id="ev-del" hidden>Excluir</button>
+      <span class="sp"></span>
+      <button type="button" id="ev-cancel">Cancelar</button>
+      <button type="submit" class="primary" id="ev-save">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-view">
+  <div class="dlg">
+    <p class="label" id="vw-kind">Outlook</p>
+    <h2 id="vw-h"></h2>
+    <dl class="kv" id="vw-kv"></dl>
+    <div class="pre" id="vw-notes" hidden></div>
+    <div class="dlg-acts">
+      <a id="vw-link" target="_blank" rel="noopener" hidden>Abrir no Outlook ↗</a>
+      <span class="sp"></span>
+      <button type="button" id="vw-close">Fechar</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+(() => {
+'use strict';
+const OUT = 'Microsoft 365';
+const TZ = 'America/Sao_Paulo';
+const $ = s => document.querySelector(s);
+
+/* ---------- utilidades ---------- */
+function el(tag, props, ...kids){
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})){
+    if (v == null || v === false) continue;
+    if (k === 'class') e.className = v;
+    else if (k === 'text') e.textContent = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids.flat()){ if (c == null || c === false) continue; e.append(c.nodeType ? c : document.createTextNode(String(c))); }
+  return e;
+}
+const pad = n => String(n).padStart(2, '0');
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parse = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d, 12); };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
+const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const DOW = ['dom','seg','ter','qua','qui','sex','sáb'];
+const DOWL = ['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+const longDate = s => { const d = parse(s); return `${DOWL[d.getDay()]}, ${d.getDate()} de ${MESES[d.getMonth()]}`; };
+const shortDate = s => { const d = parse(s); return `${DOW[d.getDay()]} ${pad(d.getDate())}/${pad(d.getMonth()+1)}`; };
+const todayStr = () => ymd(new Date());
+const clip = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n-1) + '…' : s; };
+const safeLink = u => (typeof u === 'string' && u.startsWith('https://')) ? u : null;
+const isDate = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(parse(s));
+const isTime = s => typeof s === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
+function hash(str){ // cyrb53
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < str.length; i++){ const ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1>>>16), 2246822507) ^ Math.imul(h2 ^ (h2>>>13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2>>>16), 2246822507) ^ Math.imul(h1 ^ (h1>>>13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1>>>0)).toString(36);
+}
+const normTitle = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+function plusHour(t){ if (!isTime(t)) return ''; let [h, m] = t.split(':').map(Number); h = Math.min(23, h+1); return `${pad(h)}:${pad(m)}`; }
+
+/* ---------- feriados nacionais ---------- */
+const holCache = {};
+function holidays(y){
+  if (holCache[y]) return holCache[y];
+  const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451);
+  const easter = new Date(y, Math.floor((h+l-7*m+114)/31)-1, ((h+l-7*m+114)%31)+1, 12);
+  const map = {};
+  [['01-01','Confraternização Universal'],['04-21','Tiradentes'],['05-01','Dia do Trabalho'],['09-07','Independência'],['10-12','N. Sra. Aparecida'],['11-02','Finados'],['11-15','Proclamação da República'],['11-20','Consciência Negra'],['12-25','Natal']].forEach(([md,n]) => map[`${y}-${md}`] = n);
+  map[ymd(addDays(easter,-48))] = 'Carnaval'; map[ymd(addDays(easter,-47))] = 'Carnaval';
+  map[ymd(addDays(easter,-2))] = 'Sexta-feira Santa'; map[ymd(addDays(easter,60))] = 'Corpus Christi';
+  return holCache[y] = map;
+}
+
+/* ---------- estado ---------- */
+let view = 'month';
+let cursor = parse(todayStr());
+let selected = todayStr();
+const mine = new Map();    // compromissos anotados aqui
+const sugs = new Map();    // sugestões lidas dos e-mails
+let processed = [];        // hashes dos e-mails já analisados
+let outlook = [];          // eventos do Outlook no período visível
+let outlookByRange = {};
+let mcp = null, sample = null, store = null, perms = null;
+let oSeq = 0;
+
+/* ---------- armazenamento ---------- */
+const LKEY = 'agenda-adn-v1';
+async function initStore(){
+  let db = null, user = null;
+  try { [db, user] = await Promise.all([claude.use('db'), claude.use('user')]); } catch(e){}
+  let uid = null;
+  try { uid = user ? await user.id() : null; } catch(e){}
+  if (db && uid){
+    const col = db.collection('data/users/' + uid);
+    const timer = setTimeout(() => storeNote('Sua agenda salva está demorando para carregar.'), 10000);
+    col.onSnapshot(snap => { clearTimeout(timer); storeNote(''); ingest(snap.docs.map(d => ({ ...d.data(), id: d.id }))); },
+                   err => { clearTimeout(timer); storeNote('Não consegui ler sua agenda salva (' + (err && err.code || 'erro') + '). Recarregue a página.'); });
+    store = { put: d => col.doc(d.id).set(d), del: id => col.doc(id).delete() };
+    return;
+  }
+  storeNote('Seus compromissos e sugestões ficam salvos só neste navegador. Entre no claude.ai para guardar na sua conta.');
+  const read = () => { try { return JSON.parse(localStorage.getItem(LKEY) || '{}') || {}; } catch(e){ return {}; } };
+  const write = o => { try { localStorage.setItem(LKEY, JSON.stringify(o)); } catch(e){} };
+  store = {
+    put: async d => { const o = read(); o[d.id] = d; write(o); ingest(Object.values(o)); },
+    del: async id => { const o = read(); delete o[id]; write(o); ingest(Object.values(o)); }
+  };
+  ingest(Object.values(read()));
+}
+function ingest(docs){
+  mine.clear(); sugs.clear(); processed = [];
+  for (const d of docs){
+    if (!d || typeof d !== 'object') continue;
+    if (d.kind === 'event' && isDate(d.date)) mine.set(d.id, d);
+    else if (d.kind === 'sug' && isDate(d.date)) sugs.set(d.id, d);
+    else if (d.id === 'meta' && Array.isArray(d.processed)) processed = d.processed.filter(x => typeof x === 'string');
+  }
+  render();
+}
+function storeNote(t){ $('#store-note').textContent = t; }
+
+/* ---------- Outlook ---------- */
+function parseResult(r){
+  const recs = []; let more = null;
+  for (const b of (r && r.content) || []){
+    if (!b || b.type !== 'text' || typeof b.text !== 'string') continue;
+    let j; try { j = JSON.parse(b.text); } catch(e){ continue; }
+    if (Array.isArray(j)) recs.push(...j);
+    else if (j && (j.id || j.uri)) recs.push(j);
+    else if (j && j.nextOffset != null) more = j.nextOffset;
+  }
+  if (!recs.length && r && r.payload && typeof r.payload === 'object'){
+    const p = r.payload;
+    if (Array.isArray(p)) recs.push(...p);
+    else if (Array.isArray(p.results)) recs.push(...p.results);
+    else if (p.id) recs.push(p);
+  }
+  return { recs, more };
+}
+async function callPaged(tool, input, maxPages, opts){
+  const all = []; let offset = 0;
+  for (let i = 0; i < maxPages; i++){
+    const r = await mcp.callTool(OUT, tool, { ...input, offset }, opts);
+    const { recs, more } = parseResult(r);
+    all.push(...recs);
+    if (more == null || !(more > offset)) break;
+    offset = more;
+  }
+  return all;
+}
+function mcpMsg(e){
+  switch (e && e.code){
+    case 'needs_reauth': return 'A conexão com o Outlook expirou. Reconecte "Microsoft 365" em claude.ai → Configurações → Conectores.';
+    case 'server_not_connected': case 'server_not_found': return 'O Outlook não está conectado. Adicione "Microsoft 365" em claude.ai → Configurações → Conectores.';
+    case 'selection_required': return 'Há mais de uma conta Microsoft 365 conectada. Escolha qual usar quando o claude.ai perguntar.';
+    case 'not_in_manifest': case 'approval_required': case 'not_granted': case 'consent_required': return 'A agenda ainda não tem permissão para ler seu Outlook.';
+    case 'blocked_by_policy': return 'A política da sua organização bloqueia este acesso ao Outlook.';
+    case 'server_unavailable': case 'rate_limited': return 'O Outlook não respondeu agora. Tente de novo em instantes.';
+    case 'tool_error': return 'O Outlook recusou o pedido: ' + clip(e.message, 160);
+    case 'capability_disabled': case 'capability_removed': return 'Esta visualização não acessa conectores. Abra a agenda no claude.ai.';
+    case 'cancelled': return 'Cancelado.';
+    default: return 'Falha ao falar com o Outlook (' + ((e && e.code) || 'erro') + ').';
+  }
+}
+const DENIED = ['needs_reauth','server_not_connected','server_not_found','selection_required','not_in_manifest','approval_required','not_granted','consent_required','blocked_by_policy'];
+function setOStatus(kind, text, opts = {}){
+  const s = $('#ostatus'); s.className = 'status ' + kind;
+  $('#ostatus-t').textContent = text;
+  $('#o-allow').hidden = !opts.allow;
+  $('#o-retry').hidden = !opts.retry;
+}
+function normOut(e){
+  const s = (e.start && e.start.dateTime) || '', en = (e.end && e.end.dateTime) || '';
+  const allDay = !!e.isAllDay;
+  return { id: 'o_' + e.id, src: 'outlook', title: e.subject || '(sem assunto)', date: s.slice(0,10), endDate: en.slice(0,10),
+    start: allDay ? '' : s.slice(11,16), end: allDay ? '' : en.slice(11,16), allDay,
+    location: e.location || '', notes: e.summary || '', link: safeLink(e.webLink),
+    organizer: e.organizerName || e.organizer || '', tentative: e.showAs === 'tentative', cancelled: !!e.isCancelled };
+}
+function visibleRange(){
+  if (view === 'month'){ const f = new Date(cursor.getFullYear(), cursor.getMonth(), 1, 12); const s = addDays(f, -f.getDay()); return [ymd(s), ymd(addDays(s, 41))]; }
+  if (view === 'week'){ const s = addDays(cursor, -cursor.getDay()); return [ymd(s), ymd(addDays(s, 6))]; }
+  return [ymd(cursor), ymd(addDays(cursor, 29))];
+}
+async function loadOutlook(force){
+  if (!mcp){ return; }
+  const [a, b] = visibleRange(); const key = a + '|' + b;
+  if (!force && outlookByRange[key]){ outlook = outlookByRange[key]; render(); return; }
+  const seq = ++oSeq;
+  setOStatus('load', 'Buscando seu calendário do Outlook…');
+  try {
+    const recs = await callPaged('outlook_calendar_search',
+      { query: '*', afterDateTime: a + 'T00:00:00', beforeDateTime: ymd(addDays(parse(b), 1)) + 'T00:00:00', limit: 25 }, 10,
+      { cache: force ? { staleTime: 120000, gcTime: 900000, refresh: true } : { staleTime: 120000, gcTime: 900000 } });
+    if (seq !== oSeq) return;
+    const seen = new Set();
+    outlook = recs.filter(e => e && e.id && e.start && !seen.has(e.id) && seen.add(e.id)).map(normOut).filter(e => isDate(e.date) && !e.cancelled);
+    outlookByRange[key] = outlook;
+    const now = new Date();
+    setOStatus('ok', `Outlook conectado · ${outlook.length} evento${outlook.length === 1 ? '' : 's'} no período · atualizado às ${pad(now.getHours())}:${pad(now.getMinutes())}`, { retry: true });
+    $('#o-retry').textContent = 'Atualizar';
+  } catch (e){
+    if (seq !== oSeq) return;
+    if (DENIED.includes(e && e.code)){ outlook = []; outlookByRange = {}; }
+    const canAsk = ['not_in_manifest','approval_required','consent_required'].includes(e && e.code) && perms;
+    setOStatus('err', mcpMsg(e), { allow: canAsk, retry: !canAsk });
+    $('#o-retry').textContent = 'Tentar de novo';
+  }
+  render();
+}
+
+/* ---------- eventos do dia ---------- */
+function expandDates(ev){
+  if (!ev.allDay || !isDate(ev.endDate) || ev.endDate <= ev.date) return [ev.date];
+  const out = []; let d = parse(ev.date); const end = parse(ev.endDate);
+  for (let i = 0; i < 31 && d < end; i++){ out.push(ymd(d)); d = addDays(d, 1); }
+  return out.length ? out : [ev.date];
+}
+function eventsByDay(){
+  const map = {};
+  const push = (date, ev) => (map[date] = map[date] || []).push(ev);
+  for (const ev of outlook) for (const d of expandDates(ev)) push(d, ev);
+  for (const ev of mine.values()) push(ev.date, { ...ev, src: 'mine' });
+  for (const s of sugs.values()) if (s.status === 'pending') push(s.date, { ...s, src: 'sug' });
+  for (const k in map) map[k].sort((x, y) => (x.allDay === y.allDay ? 0 : x.allDay ? -1 : 1) || (x.start || '').localeCompare(y.start || '') || x.title.localeCompare(y.title));
+  return map;
+}
+function dayEvents(map, date){
+  const hol = holidays(+date.slice(0,4))[date];
+  const list = map[date] || [];
+  return hol ? [{ id: 'h_' + date, src: 'hol', title: hol, date, allDay: true }, ...list] : list;
+}
+const timeLabel = ev => ev.allDay || !ev.start ? 'dia' : ev.start;
+const srcClass = ev => ev.src + (ev.tentative ? ' tent' : '');
+
+function chip(ev){
+  return el('button', { class: 'chip ' + srcClass(ev), type: 'button', title: ev.title, onclick: e => { e.stopPropagation(); openAny(ev); } },
+    el('span', { class: 't', text: ev.allDay || !ev.start ? '' : ev.start }), el('span', { class: 'n', text: ev.title }));
+}
+function itemRow(ev){
+  const sub = ev.src === 'outlook' ? [ev.location, ev.organizer && 'org. ' + ev.organizer].filter(Boolean).join(' · ')
+    : ev.src === 'sug' ? 'Sugestão do e-mail: ' + (ev.emailSubject || '')
+    : ev.src === 'hol' ? 'Feriado nacional'
+    : [ev.location, ev.outlookLink ? 'também no Outlook' : ''].filter(Boolean).join(' · ');
+  const time = ev.allDay || !ev.start ? 'dia todo' : ev.start + (ev.end ? '\n' + ev.end : '');
+  return el(ev.src === 'hol' ? 'div' : 'button', { class: 'item ' + srcClass(ev), type: ev.src === 'hol' ? null : 'button', onclick: ev.src === 'hol' ? null : () => openAny(ev) },
+    el('span', { class: 'tm', style: 'white-space:pre-line', text: time }),
+    el('span', {}, el('span', { class: 'ti', text: ev.title }), sub ? el('div', { class: 'sub', text: sub }) : null));
+}
+
+/* ---------- renderização ---------- */
+function render(){
+  const map = eventsByDay();
+  const t = todayStr();
+  const cal = $('#cal'); cal.replaceChildren();
+  ['month','week','list'].forEach(v => $('#v-' + v).setAttribute('aria-pressed', String(view === v)));
+  if (view === 'month'){
+    $('#period').textContent = `${MESES[cursor.getMonth()]} ${cursor.getFullYear()}`;
+    cal.append(el('div', { class: 'dow' }, DOW.map(d => el('div', { text: d }))));
+    const grid = el('div', { class: 'month' });
+    const [a] = visibleRange(); let d = parse(a);
+    for (let i = 0; i < 42; i++, d = addDays(d, 1)){
+      const ds = ymd(d); const evs = dayEvents(map, ds);
+      const cls = ['cell', d.getMonth() !== cursor.getMonth() && 'out', ds === t && 'today', ds === selected && 'sel'].filter(Boolean).join(' ');
+      const cell = el('div', { class: cls, role: 'button', tabindex: '0', 'aria-label': `${longDate(ds)}, ${evs.length} item(ns)`,
+        onclick: () => select(ds), onkeydown: e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); select(ds); } } },
+        el('span', { class: 'dn', text: d.getDate() }));
+      evs.slice(0, 3).forEach(ev => cell.append(chip(ev)));
+      if (evs.length > 3) cell.append(el('span', { class: 'more', text: `+${evs.length - 3} mais` }));
+      if (evs.length) cell.append(el('span', { class: 'dots' }, evs.slice(0, 6).map(ev => el('i', { class: ev.src }))));
+      grid.append(cell);
+    }
+    cal.append(grid);
+  } else if (view === 'week'){
+    const [a, b] = visibleRange();
+    const A = parse(a), B = parse(b);
+    $('#period').textContent = A.getMonth() === B.getMonth() ? `${A.getDate()}–${B.getDate()} de ${MESES[B.getMonth()]}` : `${A.getDate()} ${MESES[A.getMonth()].slice(0,3)} – ${B.getDate()} ${MESES[B.getMonth()].slice(0,3)}`;
+    const wk = el('div', { class: 'week' });
+    for (let i = 0, d = A; i < 7; i++, d = addDays(d, 1)){
+      const ds = ymd(d); const evs = dayEvents(map, ds);
+      wk.append(el('div', { class: ['wcol', ds === t && 'today', ds === selected && 'sel'].filter(Boolean).join(' ') },
+        el('h3', { onclick: () => select(ds) }, DOW[d.getDay()], el('b', { text: d.getDate() })),
+        evs.length ? evs.map(chip) : el('span', { class: 'muted', style: 'font-size:.78rem', text: '—' })));
+    }
+    cal.append(wk);
+  } else {
+    const [a, b] = visibleRange();
+    $('#period').textContent = `${shortDate(a)} – ${shortDate(b)}`;
+    const list = el('div', { class: 'list' });
+    let d = parse(a); let any = false;
+    for (let i = 0; i < 30; i++, d = addDays(d, 1)){
+      const ds = ymd(d); const evs = dayEvents(map, ds);
+      if (!evs.length) continue; any = true;
+      list.append(el('div', { class: 'lday' + (ds === t ? ' today' : '') },
+        el('div', { class: 'd' }, `${d.getDate()} ${MESES[d.getMonth()].slice(0,3)}`, el('small', { text: DOWL[d.getDay()] })),
+        el('div', { class: 'items' }, evs.map(itemRow))));
+    }
+    if (!any) list.append(el('div', { class: 'empty', text: 'Nenhum compromisso nos próximos 30 dias. Use "+ Compromisso" ou "Ler e-mails" para começar.' }));
+    cal.append(list);
+  }
+  // painel do dia
+  $('#day-h').textContent = longDate(selected);
+  const de = dayEvents(map, selected);
+  $('#day-items').replaceChildren(...(de.length ? de.map(itemRow) : [el('p', { class: 'muted', style: 'margin:0', text: 'Nada marcado neste dia.' })]));
+  renderSugs();
+}
+function renderSugs(){
+  const pend = [...sugs.values()].filter(s => s.status === 'pending').sort((a, b) => a.date.localeCompare(b.date) || (a.start || '').localeCompare(b.start || ''));
+  $('#sug-count').textContent = pend.length;
+  const list = $('#sug-list'); list.replaceChildren();
+  for (const s of pend){
+    const link = safeLink(s.emailLink);
+    list.append(el('div', { class: 'sug-card' },
+      el('div', { class: 'when' }, el('span', { text: shortDate(s.date) + (s.start ? ' · ' + s.start + (s.end ? '–' + s.end : '') : ' · dia todo') }),
+        s.date < todayStr() ? el('span', { class: 'conf baixa', text: 'já passou' }) : null,
+        el('span', { class: 'conf' + (s.confidence === 'baixa' ? ' baixa' : ''), text: 'confiança ' + (s.confidence || 'média') })),
+      el('div', { class: 'ti', text: s.title }),
+      el('div', { class: 'from', text: `De ${s.emailFrom || 'remetente desconhecido'} · ${s.emailSubject || ''}` }),
+      s.evidence ? el('blockquote', { text: '“' + s.evidence + '”' }) : null,
+      el('div', { class: 'acts' },
+        el('button', { class: 'primary', type: 'button', onclick: () => openEditor({ sug: s }) , text: 'Adicionar…' }),
+        el('button', { type: 'button', onclick: () => ignoreSug(s), text: 'Ignorar' }),
+        el('button', { class: 'ghost', type: 'button', onclick: () => { select(s.date, true); }, text: 'Ver no dia' }),
+        link ? el('a', { href: link, target: '_blank', rel: 'noopener', text: 'Abrir e-mail ↗' }) : null)));
+  }
+  if (!pend.length) list.append(el('p', { class: 'muted', style: 'margin:0', text: 'Nenhuma sugestão pendente.' }));
+}
+function select(ds, jump){
+  selected = ds;
+  if (jump){ cursor = parse(ds); loadOutlook(); }
+  render();
+}
+
+/* ---------- abrir itens ---------- */
+function openAny(ev){
+  if (ev.src === 'hol') return;
+  if (ev.src === 'outlook') return openView(ev);
+  if (ev.src === 'sug') return openEditor({ sug: sugs.get(ev.id) || ev });
+  return openEditor({ ev: mine.get(ev.id) || ev });
+}
+function openView(ev){
+  $('#vw-h').textContent = ev.title;
+  const when = longDate(ev.date) + (ev.allDay ? ' · dia todo' : ` · ${ev.start}${ev.end ? '–' + ev.end : ''}`);
+  const rows = [['Quando', when], ['Local', ev.location], ['Organizador', ev.organizer], ['Situação', ev.tentative ? 'provisório' : '']].filter(r => r[1]);
+  $('#vw-kv').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: v })]));
+  const n = $('#vw-notes'); n.textContent = ev.notes || ''; n.hidden = !ev.notes;
+  const a = $('#vw-link'); if (ev.link){ a.href = ev.link; a.hidden = false; } else a.hidden = true;
+  $('#dlg-view').showModal();
+}
+$('#vw-close').onclick = () => $('#dlg-view').close();
+
+let editing = null; // {ev?} | {sug?} | {}
+function openEditor(ctx){
+  editing = ctx || {};
+  const src = editing.ev || editing.sug || {};
+  $('#ev-h').textContent = editing.ev ? 'Editar compromisso' : editing.sug ? 'Adicionar da sugestão' : 'Novo compromisso';
+  $('#f-title').value = src.title || '';
+  $('#f-date').value = src.date || selected;
+  $('#f-start').value = src.start || (editing.ev || editing.sug ? '' : '09:00');
+  $('#f-end').value = src.end || (src.start ? plusHour(src.start) : (editing.ev || editing.sug ? '' : '10:00'));
+  $('#f-allday').checked = editing.ev || editing.sug ? !src.start : false;
+  $('#f-loc').value = src.location || '';
+  $('#f-notes').value = editing.sug ? [src.evidence && '“' + src.evidence + '”', src.emailSubject && 'E-mail: ' + src.emailSubject + (src.emailFrom ? ' (de ' + src.emailFrom + ')' : '')].filter(Boolean).join('\n') : (src.notes || '');
+  const srcP = $('#ev-src');
+  if (editing.sug){ srcP.hidden = false; srcP.textContent = 'Encontrado no e-mail "' + (src.emailSubject || '') + '". Confira data e horário antes de salvar.'; } else srcP.hidden = true;
+  $('#f-outlook').checked = false;
+  $('#f-outlook').disabled = !mcp || !!(editing.ev && editing.ev.outlookLink);
+  $('#f-outlook-wrap').hidden = !mcp;
+  $('#ev-del').hidden = !editing.ev;
+  $('#ev-msg').textContent = ''; $('#ev-msg').className = 'msg';
+  $('#ev-save').disabled = false;
+  syncAllDay();
+  $('#dlg-ev').showModal();
+  $('#f-title').focus();
+}
+function syncAllDay(){ const a = $('#f-allday').checked; $('#f-start').disabled = a; $('#f-end').disabled = a; }
+$('#f-allday').onchange = syncAllDay;
+$('#ev-cancel').onclick = () => $('#dlg-ev').close();
+$('#ev-del').onclick = async () => {
+  const b = $('#ev-del');
+  if (b.dataset.confirm !== '1'){ b.dataset.confirm = '1'; b.textContent = 'Confirmar exclusão'; setTimeout(() => { b.dataset.confirm = ''; b.textContent = 'Excluir'; }, 4000); return; }
+  b.dataset.confirm = ''; b.textContent = 'Excluir';
+  try { await store.del(editing.ev.id); $('#dlg-ev').close(); } catch(e){ evMsg('Não consegui excluir (' + (e && e.code || 'erro') + ').', true); }
+};
+function evMsg(t, err){ const m = $('#ev-msg'); m.textContent = t; m.className = 'msg' + (err ? ' err' : ''); }
+
+$('#ev-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const title = $('#f-title').value.trim(), date = $('#f-date').value, allDay = $('#f-allday').checked;
+  let start = allDay ? '' : $('#f-start').value, end = allDay ? '' : $('#f-end').value;
+  if (!title || !isDate(date)) return evMsg('Preencha título e data.', true);
+  if (!allDay && !isTime(start)) return evMsg('Informe o horário de início ou marque "Dia inteiro".', true);
+  if (!allDay && (!isTime(end) || end <= start)) end = plusHour(start);
+  const location = $('#f-loc').value.trim(), notes = $('#f-notes').value.trim();
+  const toOutlook = $('#f-outlook').checked && !$('#f-outlook').disabled;
+  const save = $('#ev-save'); save.disabled = true;
+  const doc = { ...(editing.ev || {}), id: editing.ev ? editing.ev.id : 'e_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    kind: 'event', title, date, start, end, allDay, location, notes, updatedAt: Date.now() };
+  if (editing.sug){ Object.assign(doc, { fromEmail: true, emailSubject: editing.sug.emailSubject || '', emailLink: editing.sug.emailLink || '' }); }
+  if (toOutlook){
+    evMsg('Criando no Outlook…');
+    const input = { subject: title.slice(0, 255), body: notes, bodyType: 'text', location: location || undefined,
+      start: { dateTime: `${date}T${allDay ? '00:00' : start}:00`, timeZone: TZ },
+      end: { dateTime: allDay ? `${ymd(addDays(parse(date), 1))}T00:00:00` : `${date}T${end}:00`, timeZone: TZ },
+      showAs: allDay ? 'free' : 'busy' };
+    if (!input.location) delete input.location;
+    try {
+      const r = await mcp.callTool(OUT, 'outlook_create_event', input, { cache: false });
+      const p = r && r.payload && typeof r.payload === 'object' ? r.payload : {};
+      doc.outlookLink = safeLink(p.webLink) || '';
+      doc.outlookId = typeof p.id === 'string' ? p.id : '';
+      outlookByRange = {};
+      try { await mcp.invalidate(OUT, 'outlook_calendar_search'); } catch(_){}
+    } catch (err){
+      save.disabled = false;
+      const ambiguous = ['server_unavailable','upstream_error'].includes(err && err.code) || !(err && err.code);
+      return evMsg(ambiguous ? 'O Outlook não confirmou a criação. Ele pode ter sido criado: confira seu calendário antes de tentar de novo.' : mcpMsg(err), true);
+    }
+  }
+  try {
+    if (toOutlook){
+      // já está no Outlook: guarda só o vínculo da sugestão, sem duplicar na agenda local
+      if (editing.ev) await store.del(editing.ev.id);
+    } else {
+      await store.put(doc);
+    }
+    if (editing.sug) await store.put({ ...editing.sug, status: 'added', addedAt: Date.now() });
+    $('#dlg-ev').close();
+    selected = date;
+    if (toOutlook) loadOutlook(true); else render();
+  } catch (err){
+    save.disabled = false;
+    evMsg('Não consegui salvar (' + (err && err.code || 'erro') + ').', true);
+  }
+});
+
+async function ignoreSug(s){
+  try { await store.put({ ...s, status: 'ignored', ignoredAt: Date.now() }); } catch(e){ scanMsg('Não consegui ignorar (' + (e && e.code || 'erro') + ').', true); }
+}
+
+/* ---------- leitura dos e-mails ---------- */
+let scanCtl = null;
+function scanMsg(t, err){ const m = $('#scan-msg'); m.textContent = t; m.className = 'scanmsg' + (err ? ' err' : ''); }
+function sampleMsg(e){
+  switch (e && e.code){
+    case 'not_granted': return 'Você não autorizou o Claude a analisar os e-mails nesta página. Recarregue para ser perguntado de novo.';
+    case 'rate_limited': return 'Limite de uso do Claude atingido agora. Tente de novo mais tarde.';
+    case 'cancelled': return 'Leitura interrompida.';
+    case 'invalid_json': return 'O Claude respondeu fora do formato esperado. Tente de novo com um período menor.';
+    default: return 'Não consegui analisar os e-mails (' + ((e && e.code) || 'erro') + ').';
+  }
+}
+function localStamp(iso){ const d = new Date(iso); return isNaN(d) ? '' : `${ymd(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+
+function buildPrompt(emails, known){
+  const t = new Date();
+  const lines = emails.map((m, i) => `[${i+1}] recebido ${localStamp(m.receivedDateTime)} · de: ${clip(m.senderName || m.sender, 80)} · assunto: ${clip(m.subject, 160)}\nprévia: ${clip(m.summary, 500)}`);
+  const kn = known.slice(0, 80).map(k => `- ${k.date}${k.start ? ' ' + k.start : ''} ${clip(k.title, 90)}`);
+  return `Você ajuda a montar uma agenda de trabalho a partir de e-mails (construtora, português do Brasil).
+Hoje é ${DOWL[t.getDay()]}, ${ymd(t)}. Fuso: America/Sao_Paulo.
+
+Tarefa: encontre nos e-mails abaixo compromissos com data que a pessoa precisa ter na agenda: reuniões, visitas e vistorias de obra, entregas de material, prazos de envio/aprovação/pagamento, vencimentos, treinamentos, audiências, integrações.
+Regras:
+- Resolva datas relativas ("amanhã", "sexta", "dia 5", "semana que vem") a partir da data de recebimento do e-mail.
+- Ignore: datas que já passaram antes de hoje, assinaturas e rodapés, histórico citado de mensagens antigas que já não vale, propaganda e newsletters.
+- Ignore compromissos que já estão no calendário (lista "Já na agenda").
+- Um e-mail pode gerar mais de um compromisso; não repita o mesmo compromisso.
+- Se a prévia parece cortada e pode conter data ou horário importante, chame a ferramenta ler_email com o número do e-mail (no máximo 12 leituras no total). Não leia e-mails que claramente não têm compromisso.
+- Título curto e claro (até 60 caracteres), com o nome da obra ou fornecedor quando houver.
+
+Responda SOMENTE com JSON neste formato:
+{"eventos":[{"email":1,"titulo":"...","data":"AAAA-MM-DD","inicio":"HH:MM ou null","fim":"HH:MM ou null","local":"texto ou null","tipo":"reuniao|visita|entrega|prazo|outro","trecho":"frase curta do e-mail que comprova (até 160 caracteres)","confianca":"alta|media|baixa"}]}
+Se não houver nada, responda {"eventos":[]}.
+
+Já na agenda:
+${kn.length ? kn.join('\n') : '(nada)'}
+
+E-mails:
+${lines.join('\n\n')}`;
+}
+
+async function scanEmails(){
+  if (!mcp){ return scanMsg('Conecte o Outlook ("Microsoft 365") no claude.ai para ler e-mails.', true); }
+  if (!sample){ return scanMsg('Esta visualização não consegue pedir análise ao Claude. Abra a agenda no claude.ai.', true); }
+  const days = Number($('#scan-days').value) || 7;
+  scanCtl = new AbortController();
+  const go = $('#scan-go'), stop = $('#scan-stop');
+  go.disabled = true; stop.hidden = false;
+  let phase = 'mcp';
+  try {
+    scanMsg(`Buscando e-mails dos últimos ${days} dias…`);
+    const after = ymd(addDays(new Date(), -days)) + 'T00:00:00';
+    const raw = await callPaged('outlook_email_search', { afterDateTime: after, limit: 25 }, 4, { cache: false, signal: scanCtl.signal });
+    const seen = new Set(processed); const ids = new Set();
+    const fresh = raw.filter(m => m && m.id && m.uri && !ids.has(m.id) && ids.add(m.id) && !seen.has(hash(m.id)))
+      .sort((a, b) => String(b.receivedDateTime).localeCompare(String(a.receivedDateTime))).slice(0, 60);
+    if (!fresh.length){ scanMsg(raw.length ? `Os ${raw.length} e-mails do período já foram analisados. Nenhum novo.` : 'Nenhum e-mail no período.'); return; }
+
+    scanMsg('Conferindo o que já está no seu calendário…');
+    let known = [];
+    try {
+      const t = todayStr();
+      known = (await callPaged('outlook_calendar_search', { query: '*', afterDateTime: t + 'T00:00:00', beforeDateTime: ymd(addDays(parse(t), 60)) + 'T00:00:00', limit: 25 }, 6,
+        { cache: { staleTime: 120000, gcTime: 900000 }, signal: scanCtl.signal })).filter(e => e && e.start).map(normOut);
+    } catch (e){ if (e && e.code === 'cancelled') throw e; }
+    known = known.concat([...mine.values()]);
+
+    let reads = 0;
+    const tools = [{
+      name: 'ler_email',
+      description: 'Lê o texto completo de um e-mail da lista pelo número entre colchetes. Devolve o corpo em texto (pode vir cortado). Use só quando a prévia não basta para achar data ou horário.',
+      inputSchema: { type: 'object', properties: { n: { type: 'integer', description: 'Número do e-mail na lista' } }, required: ['n'] },
+      async execute(input, ctx){
+        const n = Number(input && input.n); const m = fresh[n - 1];
+        if (!m) throw new Error('Número de e-mail inválido.');
+        if (++reads > 12) throw new Error('Limite de leituras atingido; use as prévias.');
+        scanMsg(`Lendo o e-mail "${clip(m.subject, 70)}"…`);
+        const r = await mcp.callTool(OUT, 'read_resource', { uri: m.uri }, { signal: ctx.signal, cache: { staleTime: 600000, gcTime: 600000 } });
+        const txt = ((r && r.content) || []).filter(b => b && b.type === 'text').map(b => b.text).join('\n').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ');
+        return clip(txt, 9000);
+      }
+    }];
+    scanMsg(`Analisando ${fresh.length} e-mail${fresh.length === 1 ? '' : 's'} com o Claude… isso pode levar um ou dois minutos.`);
+    phase = 'sample';
+    const out = await sample.json(buildPrompt(fresh, known), { tools, signal: scanCtl.signal, cache: false, modelTier: 'default' });
+    phase = 'store';
+    const evs = Array.isArray(out && out.eventos) ? out.eventos : [];
+
+    const knownKeys = new Set(known.map(k => k.date + '|' + normTitle(k.title)));
+    const t = todayStr(); let added = 0;
+    for (const ev of evs){
+      const m = fresh[Number(ev && ev.email) - 1];
+      if (!m || !isDate(ev.data) || ev.data < t || typeof ev.titulo !== 'string' || !ev.titulo.trim()) continue;
+      const title = clip(ev.titulo, 120);
+      if (knownKeys.has(ev.data + '|' + normTitle(title))) continue;
+      const id = 's_' + hash(m.id + '|' + ev.data + '|' + normTitle(title));
+      if (sugs.has(id)) continue;
+      const start = isTime(ev.inicio) ? ev.inicio : '';
+      const end = start && isTime(ev.fim) && ev.fim > start ? ev.fim : '';
+      await store.put({ id, kind: 'sug', status: 'pending', title, date: ev.data, start, end,
+        location: typeof ev.local === 'string' ? clip(ev.local, 200) : '', type: typeof ev.tipo === 'string' ? ev.tipo : 'outro',
+        evidence: typeof ev.trecho === 'string' ? clip(ev.trecho, 200) : '', confidence: ['alta','media','baixa'].includes(ev.confianca) ? (ev.confianca === 'media' ? 'média' : ev.confianca) : 'média',
+        emailSubject: clip(m.subject, 200), emailFrom: clip(m.senderName || m.sender, 120), emailLink: safeLink(m.webLink) || '', emailDate: m.receivedDateTime || '', createdAt: Date.now() });
+      added++;
+    }
+    processed = [...fresh.map(m => hash(m.id)), ...processed].slice(0, 1500);
+    await store.put({ id: 'meta', kind: 'meta', processed, lastScan: Date.now() });
+    scanMsg(added ? `${added} sugest${added === 1 ? 'ão nova' : 'ões novas'} de ${fresh.length} e-mail${fresh.length === 1 ? '' : 's'}. Confira abaixo.` : `${fresh.length} e-mail${fresh.length === 1 ? '' : 's'} analisado${fresh.length === 1 ? '' : 's'}; nenhum compromisso novo encontrado.`);
+  } catch (e){
+    const code = e && e.code;
+    if (code === 'cancelled') scanMsg('Leitura interrompida.');
+    else if (phase === 'sample') scanMsg(sampleMsg(e), true);
+    else if (phase === 'store') scanMsg('Não consegui salvar as sugestões (' + (code || 'erro') + ').', true);
+    else scanMsg(mcpMsg(e), true);
+  } finally {
+    go.disabled = false; stop.hidden = true; scanCtl = null;
+  }
+}
+$('#scan-go').onclick = scanEmails;
+$('#scan-stop').onclick = () => scanCtl && scanCtl.abort();
+
+/* ---------- navegação ---------- */
+function shift(n){
+  if (view === 'month') cursor = new Date(cursor.getFullYear(), cursor.getMonth() + n, 1, 12);
+  else cursor = addDays(cursor, n * (view === 'week' ? 7 : 30));
+  render(); loadOutlook();
+}
+$('#prev').onclick = () => shift(-1);
+$('#next').onclick = () => shift(1);
+$('#today').onclick = () => { cursor = parse(todayStr()); selected = todayStr(); render(); loadOutlook(); };
+['month','week','list'].forEach(v => $('#v-' + v).onclick = () => {
+  view = v; if (v !== 'month') cursor = parse(selected);
+  try { localStorage.setItem('agenda-adn-view', v); } catch(e){}
+  render(); loadOutlook();
+});
+$('#add-day').onclick = () => openEditor({});
+$('#o-retry').onclick = () => loadOutlook(true);
+$('#o-allow').onclick = async () => {
+  try { await perms.request(['mcp:' + OUT]); } catch(e){}
+  loadOutlook(true);
+};
+
+/* ---------- início ---------- */
+try { const v = localStorage.getItem('agenda-adn-view'); if (['month','week','list'].includes(v)) view = v; } catch(e){}
+render();
+(async () => {
+  for (let i = 0; i < 30 && !window.claude; i++) await new Promise(r => setTimeout(r, 100));
+  if (!window.claude){
+    setOStatus('err', 'Abra esta agenda no claude.ai para conectar o Outlook e salvar seus compromissos.');
+    $('#scan-go').disabled = true;
+    await initStore();
+    return;
+  }
+  const [m, s, p] = await Promise.all([
+    claude.use('mcp').catch(() => null), claude.use('sample').catch(() => null), claude.use('permissions').catch(() => null)]);
+  mcp = m; sample = s; perms = p;
+  await initStore();
+  if (!mcp){ setOStatus('err', 'O Outlook não está disponível nesta visualização. Abra a agenda no claude.ai com o conector "Microsoft 365" ativo.'); $('#scan-go').disabled = true; }
+  else loadOutlook();
+  if (!sample) scanMsg('A análise de e-mails pelo Claude não está disponível nesta visualização.', true);
+})();
+})();
+</script>
