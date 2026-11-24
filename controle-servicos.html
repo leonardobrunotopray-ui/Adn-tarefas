@@ -209,6 +209,7 @@ textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px soli
       <div class="print-opts">
         <div class="print-card"><div><strong>Mapa do serviço selecionado</strong><p id="pSel">A4, 1 folha</p></div><button class="primary" data-pdf="one">Gerar PDF</button></div>
         <div class="print-card"><div><strong>Mapa de todos os serviços</strong><p id="pAll">A4, 1 folha por serviço</p></div><button data-pdf="all">Gerar PDF</button></div>
+        <div class="print-card"><div><strong>Resumo de todas as etapas</strong><p>A4 retrato: cada serviço e subcategoria com empreiteiro, % executado, níveis executados, em execução e blocos concluídos</p></div><button data-pdf="resumo">Gerar PDF</button></div>
         <div class="print-card"><div><strong>Quadro geral</strong><p>A4 retrato, os 39 blocos × todos os serviços em uma folha</p></div><button data-pdf="quadro">Gerar PDF</button></div>
         <div class="print-card"><div><strong>Folha em branco para anotar em campo</strong><p>Mapa do serviço selecionado sem status, para o encarregado marcar à caneta</p></div><button data-pdf="blank">Gerar PDF</button></div>
       </div>
@@ -506,6 +507,43 @@ function pdfMapaPage(d,s,blank){
   d.setDrawColor(...C.line);d.setLineWidth(.2);d.setFontSize(8);d.setTextColor(...C.muted);
   d.text('Observações / arremates pendentes:',12,H-17);d.line(62,H-17,W-12,H-17);d.line(12,H-10,W-12,H-10);
 }
+function pdfResumo(d){
+  const W=210,H=297,L=10,R_=W-10,IT=items();
+  const fit=(t,w)=>{t=String(t||'');if(d.getTextWidth(t)<=w)return t;while(t.length>1&&d.getTextWidth(t+'…')>w)t=t.slice(0,-1);return t+'…'};
+  const rows=IT.map(it=>{let ok=0,and=0,tot=0,blk=0,app=0;
+    for(let b=0;b<cfg.blocos;b++){let bo=0,bt=0;for(let p=0;p<cfg.pavs.length;p++){const k=stOf(b,it.id,p);if(k==='na')continue;tot++;bt++;if(k==='ok'){ok++;bo++}else if(k==='and')and++}if(bt){app++;if(bo===bt)blk++}}
+    return{it,ok,and,tot,blk,app,pct:tot?Math.round(ok/tot*100):null}});
+  const tops=rows.filter(r=>!r.it.parent&&r.tot);const media=tops.length?Math.round(tops.reduce((a,r)=>a+r.pct,0)/tops.length):0;
+  const concl=tops.filter(r=>r.pct===100).length,andam=tops.filter(r=>r.pct<100&&(r.ok||r.and)).length,nini=tops.filter(r=>!r.ok&&!r.and).length;
+  pdfHeader(d,W,'Resumo das etapas',`${cfg.blocos} blocos · ${cfg.pavs.length} níveis por bloco · média dos serviços: ${media}% · ${concl} concluídos · ${andam} em andamento · ${nini} não iniciados`);
+  const cols=[['#',10],['Serviço / subcategoria',62],['Empreiteiro',34],['Progresso',28],['%',12],['Níveis exec.',18],['Em exec.',14],['Blocos',12]];
+  const X=[];{let x=L;for(const c of cols){X.push(x);x+=c[1]}}
+  const head=y=>{d.setFillColor(22,32,42);d.rect(L,y,R_-L,6,'F');d.setTextColor(255,255,255);d.setFont('helvetica','bold');d.setFontSize(7.5);
+    cols.forEach((c,i)=>d.text(c[0],i>=4?X[i]+c[1]-1.5:X[i]+1.5,y+4.1,i>=4?{align:'right'}:undefined));d.setFont('helvetica','normal');return y+6};
+  let y=head(34),n=0;
+  for(const r of rows){const sub=!!r.it.parent,rh=sub?5.2:6.4;
+    if(y+rh>H-14){d.addPage('a4','portrait');y=head(14)}
+    if(!sub&&n++%2===0){d.setFillColor(246,248,250);d.rect(L,y,R_-L,rh,'F')}
+    const ty=y+rh/2+1.2;d.setTextColor(...C.ink);
+    d.setFont('helvetica',sub?'normal':'bold');d.setFontSize(sub?7:8);
+    d.text(r.it.num,X[0]+(sub?3:1.5),ty);
+    d.text(fit((sub?'› ':'')+r.it.nome,cols[1][1]-(sub?5:2)),X[1]+(sub?4:1.5),ty);
+    d.setFont('helvetica','normal');d.setFontSize(sub?6.5:7);d.setTextColor(...C.muted);d.text(fit(r.it.emp||'—',cols[2][1]-2),X[2]+1.5,ty);
+    const bx=X[3]+1.5,bw=cols[3][1]-3,bh=sub?2.2:3,by=y+(rh-bh)/2;d.setFillColor(232,236,240);d.rect(bx,by,bw,bh,'F');
+    if(r.tot){if(r.ok){d.setFillColor(...C.ok);d.rect(bx,by,bw*r.ok/r.tot,bh,'F')}if(r.and){d.setFillColor(...C.and);d.rect(bx+bw*r.ok/r.tot,by,bw*r.and/r.tot,bh,'F')}}
+    d.setTextColor(...(r.pct===100?C.ok:C.ink));d.setFont('helvetica',sub?'normal':'bold');d.setFontSize(sub?7:8);
+    d.text(r.pct==null?'N/A':r.pct+'%',X[4]+cols[4][1]-1.5,ty,{align:'right'});d.setFont('helvetica','normal');d.setTextColor(...C.ink);d.setFontSize(sub?6.5:7);
+    d.text(r.tot?`${r.ok}/${r.tot}`:'—',X[5]+cols[5][1]-1.5,ty,{align:'right'});
+    d.text(r.tot?String(r.and):'—',X[6]+cols[6][1]-1.5,ty,{align:'right'});
+    d.text(r.app?`${r.blk}/${r.app}`:'—',X[7]+cols[7][1]-1.5,ty,{align:'right'});
+    if(!sub){d.setDrawColor(...C.line);d.setLineWidth(.15);d.line(L,y,R_,y)}
+    y+=rh}
+  d.setDrawColor(...C.ink);d.setLineWidth(.3);d.line(L,y,R_,y);
+  d.setFontSize(7);d.setTextColor(...C.muted);
+  const note='Níveis exec.: níveis executados / níveis em que o serviço se aplica (N/A não conta). Blocos: blocos com o serviço concluído / blocos em que se aplica. Serviço com subcategorias mostra o resumo delas.';
+  d.text(d.splitTextToSize(note,R_-L),L,Math.min(y+5,H-9));
+  const np=d.getNumberOfPages();for(let i=1;i<=np;i++){d.setPage(i);d.setFontSize(7);d.setTextColor(...C.muted);d.text(`Página ${i} de ${np}`,R_,H-5,{align:'right'})}
+}
 function pdfQuadro(d){
   const W=210,H=297,P=cfg.pavs.length,n=cfg.blocos,S=cfg.servicos;
   pdfHeader(d,W,'Quadro geral de serviços',`${n} blocos · ${S.length} serviços · níveis: ${cfg.pavs.map((p,i)=>shortP(i)+' = '+p).join(' · ')}`);
@@ -538,6 +576,7 @@ async function makePdf(kind,btn){
   const {jsPDF}=window.jspdf;let d,name;const stamp=today();
   const s=itemById(svc);
   if(kind==='quadro'){d=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});pdfQuadro(d);name=`quadro-geral-${stamp}.pdf`}
+  else if(kind==='resumo'){d=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});pdfResumo(d);name=`resumo-etapas-${stamp}.pdf`}
   else{const RW=rowsOf(),ori=RW.length>Math.max(...RW.map(r=>r.length))*0.9?'portrait':'landscape';d=new jsPDF({orientation:ori,unit:'mm',format:'a4'});
     const list=kind==='all'?items():[s];if(!list[0]){msg.textContent='Escolha um serviço primeiro.';return}
     list.forEach((x,i)=>{if(i)d.addPage('a4',ori);pdfMapaPage(d,x,kind==='blank')});
