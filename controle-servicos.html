@@ -247,7 +247,7 @@ const ST={ok:{nm:'Executado'},and:{nm:'Em execução'},na:{nm:'Não se aplica'},
 const DEF_SVCS=['Alvenaria','Arremates de alvenaria','Instalações elétricas (embutidas)','Instalações hidráulicas','Chapisco e reboco interno','Contrapiso','Reboco externo / fachada','Revestimento cerâmico','Forro de gesso','Esquadrias','Pintura interna','Pintura externa'];
 const rg=(a,b)=>{const o=[];for(let i=a;a>=b?i>=b:i<=b;i+=a>=b?-1:1)o.push(i);return o};
 const DEF_LAYOUT=[rg(21,16),rg(39,34),rg(33,28),rg(27,22),rg(15,11),rg(10,5),rg(4,1)];
-const DEF_CFG={obra:'',blocos:39,pavs:['Radier','Embasamento','Térreo','1º Pav','2º Pav','3º Pav'],servicos:DEF_SVCS.map((n,i)=>({id:'s'+(i+1),nome:n})),layout:DEF_LAYOUT};
+const DEF_CFG={obra:'',blocos:39,pavs:['Radier','Embasamento','Térreo','1º Pav','2º Pav','3º Pav','Platibanda'],servicos:DEF_SVCS.map((n,i)=>({id:'s'+(i+1),nome:n})),layout:DEF_LAYOUT};
 /* Fileiras do mapa (índices 0-based), validadas contra a quantidade de blocos */
 function rowsOf(){const seen=new Set(),rows=[];
   for(const r of (Array.isArray(cfg.layout)&&cfg.layout.length?cfg.layout:DEF_LAYOUT)){const row=[];for(const n of (Array.isArray(r)?r:[])){const b=+n-1;if(Number.isInteger(b)&&b>=0&&b<cfg.blocos&&!seen.has(b)){seen.add(b);row.push(b)}}if(row.length)rows.push(row)}
