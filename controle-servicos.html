@@ -140,6 +140,37 @@ table.q td.p{font-family:var(--f-mono);color:var(--muted)}
 .legend span{display:flex;gap:6px;align-items:center}
 @media (max-width:520px){.map{gap:12px 5px;padding:10px 8px}.fl{font-size:.6rem}}
 .map .rowsep{grid-column:1/-1;height:0;border-top:1px dashed var(--line);margin-block:-4px}
+/* Zoom (níveis 0 a 3): reduz altura dos andares para ver o canteiro inteiro sem rolar */
+.zoom{display:flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+.zoom button{border:0;background:transparent;padding:6px 11px;font-size:1.05rem;line-height:1}
+.zoom button:disabled{opacity:.35}
+.zoom span{font:500 .78rem var(--f-mono);color:var(--muted);min-width:42px;text-align:center}
+body[data-z="1"] .map{grid-template-columns:repeat(var(--cols,6),minmax(0,96px));gap:10px 8px}
+body[data-z="1"] .fl{height:17px;font-size:.58rem}
+body[data-z="1"] .bld .nm{font-size:.74rem;padding:2px 0 3px}
+body[data-z="1"] .bld .pct{font-size:.62rem;padding-top:2px}
+body[data-z="2"] .map{grid-template-columns:repeat(var(--cols,6),minmax(0,72px));gap:7px 5px;padding:8px}
+body[data-z="2"] .fl{height:11px;font-size:0;border-width:0 1px 1px}
+body[data-z="2"] .fl:first-of-type{border-top-width:1px}
+body[data-z="2"] .fl.gnd{border-bottom-width:3px}
+body[data-z="2"] .bld .nm{font-size:.66rem;padding:1px 0 2px}
+body[data-z="2"] .bld .roof{height:3px}
+body[data-z="2"] .bld .pct{font-size:.56rem;padding-top:1px}
+body[data-z="2"] .map .rowsep{margin-block:-2px}
+body[data-z="3"] .map{grid-template-columns:repeat(var(--cols,6),minmax(0,52px));gap:5px 4px;padding:6px}
+body[data-z="3"] .fl{height:7px;font-size:0;border-width:0 1px 1px}
+body[data-z="3"] .fl:first-of-type{border-top-width:1px}
+body[data-z="3"] .fl.gnd{border-bottom-width:2px}
+body[data-z="3"] .bld .nm{font-size:.58rem;padding:0 0 1px}
+body[data-z="3"] .bld .roof{height:2px;margin-inline:-1px}
+body[data-z="3"] .bld .pct{display:none}
+body[data-z="3"] .map .rowsep{margin-block:-1px}
+body[data-z="2"] .fl.sel,body[data-z="3"] .fl.sel{box-shadow:inset 0 0 0 2px var(--accent)}
+body[data-z="1"] .sq button{width:10px;height:10px}
+body[data-z="2"] .sq button{width:8px;height:8px;border-width:1px}
+body[data-z="3"] .sq button{width:6px;height:6px;border-width:1px;border-radius:1px}
+body[data-z="2"] table.q th,body[data-z="2"] table.q td,body[data-z="3"] table.q th,body[data-z="3"] table.q td{padding:2px 3px;font-size:.7rem}
+body[data-z="2"] .sq,body[data-z="3"] .sq{gap:1px}
 table.q tr.g th,table.q tr.g td{border-top:2px solid var(--ink)}
 textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%;min-height:150px;font-family:var(--f-mono);resize:vertical}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -169,6 +200,7 @@ textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px soli
     <div class="brush" role="group" aria-label="Status a aplicar" id="brush"></div>
     <button id="selMode" aria-pressed="false" title="Marque vários andares e aplique o status de uma vez">Selecionar vários</button>
     <button class="ghost" id="undo" disabled>Desfazer</button>
+    <div class="zoom" id="zoom" role="group" aria-label="Zoom do mapa"><button id="zOut" aria-label="Diminuir (ver mais)">−</button><span id="zLbl">100%</span><button id="zIn" aria-label="Aumentar">+</button></div>
     <div class="selbar" id="selBar" hidden>
       <span id="selCount" class="mono">0 selecionados</span>
       <button class="primary" id="selApply" disabled>Aplicar</button>
@@ -249,11 +281,15 @@ function fmtLayout(rows){return rows.map(r=>{const parts=[];let i=0;while(i<r.le
 let cfg=JSON.parse(JSON.stringify(DEF_CFG));
 let cells={}; // key b_sid_p -> {s,d}
 let db=null, user=null, dl=null, canWrite=true;
+let zoom=(Math.min(window.innerWidth||999,screen.width||999)<600?2:0);
 let brush='ok', svc=null, view='mapa', lastUndo=null;
 let selMode=false; const selSet=new Set(); const sk=(b,s,p)=>`${b}|${s}|${p}`;
 const LS='mapa-servicos-v1';
-try{const c=JSON.parse(localStorage.getItem(LS)||'null');if(c){if(c.cfg)cfg=c.cfg;if(c.cells)cells=c.cells;if(c.svc)svc=c.svc;if(c.brush)brush=c.brush}}catch(e){}
-function saveLocal(){try{localStorage.setItem(LS,JSON.stringify({cfg,cells,svc,brush}))}catch(e){}}
+try{const c=JSON.parse(localStorage.getItem(LS)||'null');if(c){if(c.cfg)cfg=c.cfg;if(c.cells)cells=c.cells;if(c.svc)svc=c.svc;if(c.brush)brush=c.brush;if(c.zoom!=null)zoom=c.zoom}}catch(e){}
+function saveLocal(){try{localStorage.setItem(LS,JSON.stringify({cfg,cells,svc,brush,zoom}))}catch(e){}}
+const ZL=['100%','75%','50%','35%'];
+function applyZoom(){document.body.dataset.z=zoom;$('#zLbl').textContent=ZL[zoom];$('#zOut').disabled=zoom>=3;$('#zIn').disabled=zoom<=0}
+document.addEventListener('click',e=>{const t=e.target.closest('#zOut,#zIn');if(!t)return;zoom=Math.max(0,Math.min(3,zoom+(t.id==='zOut'?1:-1)));applyZoom();saveLocal()});
 
 const bn=i=>String(i+1).padStart(2,'0');
 /* Pavimento identificado pelo nome (não pela posição): inserir um nível novo não desloca as marcações */
@@ -354,6 +390,7 @@ function render(){
   renderSvcSelect();renderBrush();
   $('#toolbar').hidden=!(view==='mapa'||view==='quadro'||view==='imprimir');
   $('#brush').hidden=$('#undo').hidden=$('#selMode').hidden=view==='imprimir';
+  $('#zoom').hidden=!(view==='mapa'||view==='quadro');applyZoom();
   renderSel();
   $('#svcPickWrap').hidden=view==='quadro';
   $$('.view').forEach(v=>v.hidden=v.id!=='v-'+view);
