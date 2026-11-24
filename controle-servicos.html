@@ -1,0 +1,437 @@
+<title>Mapa de Serviços da Obra</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: barra de ferramentas (abas + pincel de status) no topo; mapa de prédios (bloco × pavimento) por serviço, quadro geral bloco × serviço, e configuração. PDF A4 gerado no navegador. */
+:root{
+  --bg:#eef1f4; --surface:#ffffff; --surface-2:#f6f8fa; --ink:#16202a; --muted:#5a6774; --line:#c9d1da;
+  --accent:#1c5d8f; --accent-soft:#e3eef7; --accent-ink:#ffffff;
+  --ok:#2c7a4b; --ok-soft:#e2f2e8; --and:#d99a1e; --and-soft:#fbf0dc; --na:#a7b0ba; --bad:#b83227;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-head:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --r:8px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1318; --surface:#161e26; --surface-2:#1c252e; --ink:#e4eaf0; --muted:#93a0ad; --line:#33404d;
+  --accent:#62a6da; --accent-soft:#1b3347; --accent-ink:#0b1620;
+  --ok:#4fb57e; --ok-soft:#173326; --and:#e3aa4c; --and-soft:#3a2c13; --na:#5a6672; --bad:#f0776a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1318; --surface:#161e26; --surface-2:#1c252e; --ink:#e4eaf0; --muted:#93a0ad; --line:#33404d;
+  --accent:#62a6da; --accent-soft:#1b3347; --accent-ink:#0b1620;
+  --ok:#4fb57e; --ok-soft:#173326; --and:#e3aa4c; --and-soft:#3a2c13; --na:#5a6672; --bad:#f0776a; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45}
+.wrap{max-width:1240px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:16px}
+h1,h2,h3{font-family:var(--f-head);font-weight:600;text-wrap:balance;margin:0}
+h1{font-size:1.6rem;letter-spacing:-.01em}
+h2{font-size:1.15rem}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.label{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:500}
+button{font:inherit;font-weight:500;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:7px 12px;cursor:pointer;line-height:1.2}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.ghost{background:transparent;border-color:transparent;color:var(--accent);padding-inline:8px}
+button.ghost:hover{background:var(--accent-soft)}
+button:disabled{opacity:.5;cursor:default}
+input,select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}
+
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+header.top p{margin:4px 0 0;color:var(--muted)}
+.sync{font-size:.8rem;color:var(--muted);display:flex;gap:6px;align-items:center}
+.sync i{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.sync.ok i{background:var(--ok)}.sync.slow i{background:var(--bad)}
+
+nav.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto}
+nav.tabs a{padding:9px 14px;color:var(--muted);text-decoration:none;font-weight:500;border-bottom:3px solid transparent;white-space:nowrap}
+nav.tabs a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--accent)}
+
+/* Barra do pincel */
+.toolbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:8px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;border-bottom:1px solid var(--line)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.brush{display:flex;gap:4px;flex-wrap:wrap}
+.brush button{display:flex;gap:7px;align-items:center;padding:6px 10px}
+.brush button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink);box-shadow:inset 0 0 0 1px var(--accent)}
+.sw{width:16px;height:12px;border:1.5px solid var(--ink);border-radius:2px;display:inline-block;flex:none}
+.st-ok,.sw.st-ok{background:var(--ok)}
+.st-and,.sw.st-and{background:linear-gradient(to top,var(--and) 50%,var(--surface) 50%)}
+.st-na,.sw.st-na{background:repeating-linear-gradient(135deg,var(--na) 0 2px,var(--surface) 2px 5px)}
+.st-none,.sw.st-none{background:var(--surface)}
+.toolbar select{width:auto;max-width:100%;min-width:0;font-weight:600}
+.svc-pick{display:flex;gap:8px;align-items:center;flex:1 1 260px;min-width:0}
+.svc-pick select{flex:1 1 auto}
+
+/* Resumo */
+.summary{display:flex;flex-wrap:wrap;gap:6px 26px;align-items:baseline}
+.summary div{display:flex;gap:8px;align-items:baseline}
+.summary b{font-family:var(--f-mono);font-size:1.25rem;font-weight:500}
+.bar{height:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:99px;overflow:hidden;flex:1 1 200px;min-width:120px;display:flex}
+.bar span{display:block;height:100%}
+
+/* Mapa de prédios */
+.map{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:14px 10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.bld{display:grid;gap:0;justify-items:stretch}
+.bld .nm{font:600 .8rem/1 var(--f-head);text-align:center;padding:4px 0 5px;border:0;background:transparent;border-radius:4px;color:var(--ink)}
+.bld .nm:hover{background:var(--accent-soft)}
+.bld .roof{height:5px;margin-inline:-3px;background:var(--ink);border-radius:2px 2px 0 0}
+.fl{height:26px;border:1.5px solid var(--ink);border-top-width:0;border-radius:0;padding:0;position:relative;display:flex;align-items:center;justify-content:center;font:500 .66rem/1 var(--f-mono);color:var(--muted)}
+.fl:first-of-type{border-top-width:1.5px}
+.fl.st-ok{color:#fff}
+.fl:hover{outline:2px solid var(--accent);outline-offset:-3px}
+.bld .pct{font:500 .7rem/1 var(--f-mono);text-align:center;color:var(--muted);padding-top:4px}
+.bld.done .pct{color:var(--ok);font-weight:600}
+
+/* Quadro geral */
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+table.q{border-collapse:collapse;font-size:.78rem}
+table.q th,table.q td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:4px 6px;text-align:center}
+table.q thead th{vertical-align:bottom;background:var(--surface-2);font-weight:500}
+table.q thead th.v span{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;display:inline-block;max-height:150px;overflow:hidden;text-overflow:ellipsis;font-family:var(--f-head);font-weight:600;font-size:.8rem}
+table.q th.b{position:sticky;left:0;background:var(--surface);z-index:1;text-align:left;font-family:var(--f-head);white-space:nowrap}
+table.q thead th.b{background:var(--surface-2)}
+.sq{display:inline-flex;gap:2px}
+.sq button{width:13px;height:13px;padding:0;border:1.2px solid var(--ink);border-radius:2px}
+.sq button:hover{outline:2px solid var(--accent);outline-offset:1px}
+table.q tfoot td,table.q tfoot th{background:var(--surface-2);font-family:var(--f-mono)}
+table.q td.p{font-family:var(--f-mono);color:var(--muted)}
+
+/* Configuração */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;gap:14px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.field{display:grid;gap:4px}
+.svclist{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.svclist li{display:flex;gap:6px;align-items:center}
+.svclist li .n{font:500 .75rem var(--f-mono);color:var(--muted);width:22px;text-align:right;flex:none}
+.svclist li input{flex:1 1 auto;min-width:0}
+.svclist li button{padding:6px 8px;flex:none}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* Impressão (PDF) */
+.print-opts{display:grid;gap:10px}
+.print-card{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;border:1px solid var(--line);border-radius:6px;padding:12px;background:var(--surface-2)}
+.print-card p{margin:2px 0 0;color:var(--muted);font-size:.85rem}
+.note{font-size:.85rem;color:var(--muted)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:6px;font-size:.88rem;z-index:20;max-width:calc(100% - 32px)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.82rem;color:var(--muted)}
+.legend span{display:flex;gap:6px;align-items:center}
+@media (max-width:520px){.map{grid-template-columns:repeat(4,1fr);gap:12px 8px;padding:10px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media print{.toolbar,nav.tabs,.no-print,.toast{display:none!important}.map,.tablewrap{border:0}body{background:#fff}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="label" id="obraLbl">Controle de execução</div>
+      <h1>Mapa de serviços</h1>
+      <p id="sub">Cada prédio é um bloco; cada andar, um pavimento. Escolha o status no pincel e toque nos andares.</p>
+    </div>
+    <div class="sync" id="sync"><i></i><span>Carregando…</span></div>
+  </header>
+
+  <nav class="tabs" aria-label="Visões">
+    <a href="#mapa" data-v="mapa">Mapa por serviço</a>
+    <a href="#quadro" data-v="quadro">Quadro geral</a>
+    <a href="#imprimir" data-v="imprimir">Imprimir (PDF A4)</a>
+    <a href="#ajustes" data-v="ajustes">Serviços e blocos</a>
+  </nav>
+
+  <div class="toolbar" id="toolbar">
+    <div class="svc-pick" id="svcPickWrap"><label class="label" for="svc">Serviço</label><select id="svc"></select></div>
+    <div class="brush" role="group" aria-label="Status a aplicar" id="brush"></div>
+    <button class="ghost" id="undo" disabled>Desfazer</button>
+  </div>
+
+  <section id="v-mapa" class="view">
+    <div style="display:grid;gap:12px">
+      <div class="summary" id="sumMapa"></div>
+      <div class="map" id="map"></div>
+      <p class="note">Toque no nome do bloco para aplicar o status aos 4 pavimentos de uma vez.</p>
+    </div>
+  </section>
+
+  <section id="v-quadro" class="view" hidden>
+    <div style="display:grid;gap:10px">
+      <div class="legend" id="legQ"></div>
+      <div class="tablewrap"><table class="q" id="quadro"></table></div>
+      <p class="note">Em cada célula, os quadradinhos são, da esquerda para a direita: Térreo, 1º, 2º e 3º pavimento.</p>
+    </div>
+  </section>
+
+  <section id="v-imprimir" class="view" hidden>
+    <div class="panel">
+      <div><h2>Folhas para a equipe</h2><p class="note" style="margin:4px 0 0">Gera um PDF em folha A4, pronto para imprimir e fixar no canteiro. O PDF mostra a situação no momento em que é gerado.</p></div>
+      <div class="print-opts">
+        <div class="print-card"><div><strong>Mapa do serviço selecionado</strong><p id="pSel">A4 paisagem, 1 folha</p></div><button class="primary" data-pdf="one">Gerar PDF</button></div>
+        <div class="print-card"><div><strong>Mapa de todos os serviços</strong><p id="pAll">A4 paisagem, 1 folha por serviço</p></div><button data-pdf="all">Gerar PDF</button></div>
+        <div class="print-card"><div><strong>Quadro geral</strong><p>A4 retrato, os 39 blocos × todos os serviços em uma folha</p></div><button data-pdf="quadro">Gerar PDF</button></div>
+        <div class="print-card"><div><strong>Folha em branco para anotar em campo</strong><p>Mapa do serviço selecionado sem status, para o encarregado marcar à caneta</p></div><button data-pdf="blank">Gerar PDF</button></div>
+      </div>
+      <p class="note" id="pdfMsg"></p>
+    </div>
+  </section>
+
+  <section id="v-ajustes" class="view" hidden>
+    <div class="panel">
+      <div class="grid2">
+        <div class="field"><label class="label" for="obra">Nome do empreendimento</label><input id="obra" placeholder="Ex.: Residencial Parque das Flores"></div>
+        <div class="field"><label class="label" for="nblocos">Quantidade de blocos</label><input id="nblocos" type="number" min="1" max="200"></div>
+        <div class="field"><label class="label" for="pavs">Pavimentos (de baixo para cima, separados por vírgula)</label><input id="pavs"></div>
+      </div>
+      <div class="field">
+        <span class="label">Serviços (na ordem de execução)</span>
+        <ul class="svclist" id="svclist"></ul>
+        <div class="row"><input id="newSvc" placeholder="Novo serviço, ex.: Arremates de reboco" style="flex:1 1 220px;width:auto;min-width:0"><button id="addSvc">Adicionar</button></div>
+      </div>
+      <div class="row"><button class="primary" id="saveCfg">Salvar ajustes</button><span class="note" id="cfgMsg"></span></div>
+      <p class="note">Remover um serviço da lista não apaga as marcações já feitas; se ele voltar com o mesmo nome antigo, é um serviço novo.</p>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ST={ok:{nm:'Executado'},and:{nm:'Em execução'},na:{nm:'Não se aplica'},none:{nm:'Não iniciado'}};
+const DEF_SVCS=['Alvenaria','Arremates de alvenaria','Instalações elétricas (embutidas)','Instalações hidráulicas','Chapisco e reboco interno','Contrapiso','Reboco externo / fachada','Revestimento cerâmico','Forro de gesso','Esquadrias','Pintura interna','Pintura externa'];
+const DEF_CFG={obra:'',blocos:39,pavs:['Térreo','1º Pav','2º Pav','3º Pav'],servicos:DEF_SVCS.map((n,i)=>({id:'s'+(i+1),nome:n}))};
+let cfg=JSON.parse(JSON.stringify(DEF_CFG));
+let cells={}; // key b_sid_p -> {s,d}
+let db=null, user=null, dl=null, canWrite=true;
+let brush='ok', svc=null, view='mapa', lastUndo=null;
+const LS='mapa-servicos-v1';
+try{const c=JSON.parse(localStorage.getItem(LS)||'null');if(c){if(c.cfg)cfg=c.cfg;if(c.cells)cells=c.cells;if(c.svc)svc=c.svc;if(c.brush)brush=c.brush}}catch(e){}
+function saveLocal(){try{localStorage.setItem(LS,JSON.stringify({cfg,cells,svc,brush}))}catch(e){}}
+
+const bn=i=>String(i+1).padStart(2,'0');
+const key=(b,s,p)=>`${b}_${s}_${p}`;
+const stOf=(b,s,p)=>cells[key(b,s,p)]?.s||'none';
+const today=()=>new Date().toISOString().slice(0,10);
+const fmtD=d=>d?d.split('-').reverse().join('/'):'';
+function toast(t){const el=$('#toast');el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,2600)}
+function setSync(k,t){const s=$('#sync');s.className='sync '+k;s.querySelector('span').textContent=t}
+
+function stats(sid){let ok=0,and=0,na=0,tot=0,blk=0;
+  for(let b=0;b<cfg.blocos;b++){let bo=0,bn_=0;for(let p=0;p<cfg.pavs.length;p++){const s=stOf(b,sid,p);if(s==='na'){na++;continue}tot++;bn_++;if(s==='ok'){ok++;bo++}else if(s==='and')and++}if(bn_&&bo===bn_)blk++}
+  return{ok,and,na,tot,blk,pct:tot?Math.round(ok/tot*100):0}}
+function blockPct(b,sid){let ok=0,t=0;for(let p=0;p<cfg.pavs.length;p++){const s=stOf(b,sid,p);if(s==='na')continue;t++;if(s==='ok')ok++}return t?Math.round(ok/t*100):100}
+
+/* ---------- Render ---------- */
+function renderBrush(){
+  $('#brush').innerHTML=['ok','and','none','na'].map(k=>`<button aria-pressed="${brush===k}" data-b="${k}"><i class="sw st-${k}"></i>${ST[k].nm}</button>`).join('');
+}
+function renderSvcSelect(){
+  if(!cfg.servicos.some(s=>s.id===svc))svc=cfg.servicos[0]?.id||null;
+  $('#svc').innerHTML=cfg.servicos.map((s,i)=>`<option value="${esc(s.id)}"${s.id===svc?' selected':''}>${i+1}. ${esc(s.nome)}</option>`).join('');
+}
+function renderMapa(){
+  const s=cfg.servicos.find(x=>x.id===svc);
+  if(!s){$('#map').innerHTML='<p class="muted">Cadastre um serviço em “Serviços e blocos”.</p>';$('#sumMapa').innerHTML='';return}
+  const st=stats(svc), P=cfg.pavs.length;
+  $('#sumMapa').innerHTML=`<div><b>${st.pct}%</b><span class="muted">de ${esc(s.nome)}</span></div>
+   <div><b>${st.ok}</b><span class="muted">de ${st.tot} pavimentos executados</span></div>
+   <div><b>${st.and}</b><span class="muted">em execução</span></div>
+   <div><b>${st.blk}</b><span class="muted">de ${cfg.blocos} blocos concluídos</span></div>
+   <div class="bar" aria-hidden="true"><span style="width:${st.tot?st.ok/st.tot*100:0}%;background:var(--ok)"></span><span style="width:${st.tot?st.and/st.tot*100:0}%;background:var(--and)"></span></div>`;
+  let h='';
+  for(let b=0;b<cfg.blocos;b++){
+    let fl='';
+    for(let p=P-1;p>=0;p--){const c=cells[key(b,svc,p)];const k=c?.s||'none';
+      const tip=`Bloco ${bn(b)} · ${cfg.pavs[p]} · ${ST[k].nm}${c?.d?' em '+fmtD(c.d):''}`;
+      fl+=`<button class="fl st-${k}" data-b="${b}" data-p="${p}" title="${esc(tip)}" aria-label="${esc(tip)}">${p===0?'T':p}</button>`}
+    const pc=blockPct(b,svc);
+    h+=`<div class="bld${pc===100?' done':''}"><button class="nm" data-blk="${b}" title="Aplicar a todos os pavimentos do bloco ${bn(b)}">B${bn(b)}</button><div class="roof"></div>${fl}<div class="pct">${pc}%</div></div>`;
+  }
+  $('#map').innerHTML=h;
+}
+function renderQuadro(){
+  const P=cfg.pavs.length;
+  $('#legQ').innerHTML=['ok','and','none','na'].map(k=>`<span><i class="sw st-${k}"></i>${ST[k].nm}</span>`).join('');
+  let h=`<thead><tr><th class="b">Bloco</th>${cfg.servicos.map((s,i)=>`<th class="v" title="${esc(s.nome)}"><span>${i+1}. ${esc(s.nome)}</span></th>`).join('')}</tr></thead><tbody>`;
+  for(let b=0;b<cfg.blocos;b++){
+    h+=`<tr><th class="b">Bloco ${bn(b)}</th>`;
+    for(const s of cfg.servicos){h+='<td><span class="sq">';
+      for(let p=0;p<P;p++){const c=cells[key(b,s.id,p)];const k=c?.s||'none';const tip=`Bloco ${bn(b)} · ${s.nome} · ${cfg.pavs[p]} · ${ST[k].nm}${c?.d?' em '+fmtD(c.d):''}`;
+        h+=`<button class="st-${k}" data-b="${b}" data-s="${esc(s.id)}" data-p="${p}" title="${esc(tip)}" aria-label="${esc(tip)}"></button>`}
+      h+='</span></td>'}
+    h+='</tr>'}
+  h+=`</tbody><tfoot><tr><th class="b">% executado</th>${cfg.servicos.map(s=>`<td>${stats(s.id).pct}%</td>`).join('')}</tr></tfoot>`;
+  $('#quadro').innerHTML=h;
+}
+function renderAjustes(){
+  if(document.activeElement?.closest?.('#v-ajustes'))return;
+  $('#obra').value=cfg.obra||'';$('#nblocos').value=cfg.blocos;$('#pavs').value=cfg.pavs.join(', ');
+  draft=cfg.servicos.map(s=>({...s}));renderSvcList();
+}
+let draft=[];
+function renderSvcList(){
+  $('#svclist').innerHTML=draft.map((s,i)=>`<li><span class="n">${i+1}</span><input id="sv-${esc(s.id)}" value="${esc(s.nome)}" data-i="${i}" aria-label="Nome do serviço ${i+1}"><button data-up="${i}" ${i?'':'disabled'} aria-label="Subir">↑</button><button data-dn="${i}" ${i<draft.length-1?'':'disabled'} aria-label="Descer">↓</button><button data-rm="${i}" aria-label="Remover">Remover</button></li>`).join('');
+}
+function render(){
+  $('#obraLbl').textContent=cfg.obra?cfg.obra:'Controle de execução';
+  $('#sub').textContent=`${cfg.blocos} blocos · ${cfg.pavs.join(', ')} · ${cfg.servicos.length} serviços. Escolha o status no pincel e toque nos andares.`;
+  renderSvcSelect();renderBrush();
+  $('#toolbar').hidden=!(view==='mapa'||view==='quadro'||view==='imprimir');
+  $('#brush').hidden=$('#undo').hidden=view==='imprimir';
+  $('#svcPickWrap').hidden=view==='quadro';
+  $$('.view').forEach(v=>v.hidden=v.id!=='v-'+view);
+  $$('nav.tabs a').forEach(a=>{if(a.dataset.v===view)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
+  const s=cfg.servicos.find(x=>x.id===svc);$('#pSel').textContent=`A4 paisagem, 1 folha · ${s?s.nome:'nenhum serviço'}`;$('#pAll').textContent=`A4 paisagem, ${cfg.servicos.length} folhas (1 por serviço)`;
+  $('#undo').disabled=!lastUndo;
+  if(view==='mapa')renderMapa();if(view==='quadro')renderQuadro();if(view==='ajustes')renderAjustes();
+}
+
+/* ---------- Edição ---------- */
+async function paint(list){ // list of [b,sid,p]
+  if(!canWrite){toast('Você tem acesso só de leitura a esta página.');return}
+  const prev=[];const writes=[];
+  for(const [b,s,p] of list){const k=key(b,s,p);const cur=cells[k]||null;
+    if((cur?.s||'none')===brush)continue;prev.push([k,cur]);
+    const val=brush==='none'?null:{s:brush,d:today(),b:+b,sv:s,p:+p};
+    if(val)cells[k]=val;else delete cells[k];writes.push([k,val])}
+  if(!writes.length)return;
+  lastUndo=prev;saveLocal();render();await push(writes);
+}
+async function push(writes){
+  if(!db)return;
+  try{for(const [k,v] of writes){const ref=db.collection('exec').doc(k);if(v)await ref.set(v);else await ref.delete()}}
+  catch(e){toast('Não foi possível salvar: '+(e?.message||e?.code||'erro'));}
+}
+$('#undo').onclick=async()=>{if(!lastUndo)return;const w=[];for(const [k,v] of lastUndo){if(v)cells[k]=v;else delete cells[k];w.push([k,v])}lastUndo=null;saveLocal();render();await push(w);toast('Desfeito')};
+$('#brush').onclick=e=>{const b=e.target.closest('button[data-b]');if(!b)return;brush=b.dataset.b;saveLocal();renderBrush()};
+$('#svc').onchange=e=>{svc=e.target.value;saveLocal();render()};
+$('#map').onclick=e=>{const f=e.target.closest('.fl');if(f)return paint([[f.dataset.b,svc,f.dataset.p]]);
+  const n=e.target.closest('.nm');if(n)paint(cfg.pavs.map((_,p)=>[n.dataset.blk,svc,p]))};
+$('#quadro').onclick=e=>{const c=e.target.closest('button[data-s]');if(c)paint([[c.dataset.b,c.dataset.s,c.dataset.p]])};
+
+/* ---------- Ajustes ---------- */
+$('#svclist').oninput=e=>{const i=e.target.dataset.i;if(i!=null)draft[i].nome=e.target.value};
+$('#svclist').onclick=e=>{const t=e.target;let i;
+  if((i=t.dataset.up)!=null){i=+i;[draft[i-1],draft[i]]=[draft[i],draft[i-1]]}
+  else if((i=t.dataset.dn)!=null){i=+i;[draft[i+1],draft[i]]=[draft[i],draft[i+1]]}
+  else if((i=t.dataset.rm)!=null){draft.splice(+i,1)}else return;renderSvcList()};
+$('#addSvc').onclick=()=>{const n=$('#newSvc').value.trim();if(!n)return;draft.push({id:'s'+Date.now().toString(36),nome:n});$('#newSvc').value='';renderSvcList()};
+$('#newSvc').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('#addSvc').click()}};
+$('#saveCfg').onclick=async()=>{
+  const nb=Math.max(1,Math.min(200,parseInt($('#nblocos').value)||39));
+  const pv=$('#pavs').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const sv=draft.map(s=>({id:s.id,nome:s.nome.trim()})).filter(s=>s.nome);
+  if(!pv.length){$('#cfgMsg').textContent='Informe ao menos um pavimento.';return}
+  if(!sv.length){$('#cfgMsg').textContent='Informe ao menos um serviço.';return}
+  cfg={obra:$('#obra').value.trim(),blocos:nb,pavs:pv,servicos:sv};saveLocal();
+  if(db&&canWrite){try{await db.doc('config/geral').set(cfg);$('#cfgMsg').textContent='Ajustes salvos para toda a equipe.'}catch(e){$('#cfgMsg').textContent='Não foi possível salvar: '+(e?.message||e?.code)}}
+  else $('#cfgMsg').textContent='Salvo só neste aparelho (sem conexão ou sem permissão de edição).';
+  document.activeElement?.blur();render();
+};
+
+/* ---------- Navegação ---------- */
+function route(){const h=location.hash.slice(1);view=['mapa','quadro','imprimir','ajustes'].includes(h)?h:'mapa';render()}
+window.addEventListener('hashchange',route);
+
+/* ---------- PDF ---------- */
+const C={ok:[44,122,75],and:[217,154,30],na:[167,176,186],ink:[22,32,42],muted:[90,103,116],line:[201,209,218]};
+function pdfFloor(d,x,y,w,h,k){
+  d.setDrawColor(...C.ink);d.setLineWidth(0.35);
+  if(k==='ok'){d.setFillColor(...C.ok);d.rect(x,y,w,h,'FD');d.setDrawColor(255,255,255);d.setLineWidth(0.6);
+    const cx=x+w/2,cy=y+h/2,s=Math.min(w,h)*.28;d.line(cx-s,cy,cx-s*.3,cy+s*.7);d.line(cx-s*.3,cy+s*.7,cx+s,cy-s*.6);d.setDrawColor(...C.ink);d.setLineWidth(.35)}
+  else if(k==='and'){d.setFillColor(...C.and);d.rect(x,y+h/2,w,h/2,'F');d.rect(x,y,w,h,'S')}
+  else if(k==='na'){d.setFillColor(235,238,241);d.rect(x,y,w,h,'FD');d.setDrawColor(...C.na);d.line(x,y+h,x+w,y);d.setDrawColor(...C.ink)}
+  else d.rect(x,y,w,h,'S');
+}
+function pdfLegend(d,x,y){d.setFontSize(8);d.setTextColor(...C.ink);let cx=x;
+  for(const k of ['ok','and','none','na']){pdfFloor(d,cx,y-3,6,4,k);d.text(ST[k].nm,cx+8,y);cx+=8+d.getTextWidth(ST[k].nm)+6}return cx}
+function pdfHeader(d,W,title,sub){
+  d.setTextColor(...C.muted);d.setFontSize(9);d.text((cfg.obra||'Controle de execução').toUpperCase(),12,13);
+  d.setTextColor(...C.ink);d.setFont('helvetica','bold');d.setFontSize(18);d.text(title,12,21);d.setFont('helvetica','normal');
+  d.setFontSize(9);d.setTextColor(...C.muted);d.text(sub,12,27);
+  const ts='Situação em '+new Date().toLocaleDateString('pt-BR')+' às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  d.text(ts,W-12,13,{align:'right'});
+}
+function pdfMapaPage(d,s,blank){
+  const W=297,H=210,P=cfg.pavs.length,n=cfg.blocos;
+  const st=blank?null:stats(s.id);
+  pdfHeader(d,W,s.nome,blank?'Folha de campo: pinte cada andar à caneta conforme a legenda.':`${st.pct}% executado · ${st.ok} de ${st.tot} pavimentos · ${st.and} em execução · ${st.blk} de ${n} blocos concluídos`);
+  const lx=W-12-110;pdfLegend(d,lx+4,26);
+  const top=36,bottom=H-24,left=24,right=W-12;
+  const cols=Math.min(n,13),rows=Math.ceil(n/cols);
+  const cw=(right-left)/cols,rh=(bottom-top)/rows;
+  const bw=Math.min(cw*.72,18),lab=5,pctH=blank?1:4,fh=Math.min((rh-lab-pctH-5)/P,11);
+  for(let r=0;r<rows;r++){const y0=top+r*rh;
+    d.setFontSize(7);d.setTextColor(...C.muted);
+    for(let p=0;p<P;p++){const fy=y0+lab+1.5+(P-1-p)*fh;d.text(p===0?'Térreo':cfg.pavs[p].replace(/\s*Pav.*/i,'')+' pav',left-2,fy+fh/2+1,{align:'right'})}
+    for(let c=0;c<cols;c++){const b=r*cols+c;if(b>=n)break;const x=left+c*cw+(cw-bw)/2;
+      d.setFont('helvetica','bold');d.setFontSize(9);d.setTextColor(...C.ink);d.text('B'+bn(b),x+bw/2,y0+lab-1,{align:'center'});d.setFont('helvetica','normal');
+      d.setFillColor(...C.ink);d.rect(x-.8,y0+lab,bw+1.6,1.5,'F');
+      for(let p=0;p<P;p++){pdfFloor(d,x,y0+lab+1.5+(P-1-p)*fh,bw,fh,blank?'none':stOf(b,s.id,p))}
+      if(!blank){const pc=blockPct(b,s.id);d.setFontSize(7);d.setTextColor(...(pc===100?C.ok:C.muted));d.text(pc+'%',x+bw/2,y0+lab+1.5+P*fh+3.2,{align:'center'})}
+    }}
+  d.setDrawColor(...C.line);d.setLineWidth(.2);d.setFontSize(8);d.setTextColor(...C.muted);
+  d.text('Observações / arremates pendentes:',12,H-17);d.line(62,H-17,W-12,H-17);d.line(12,H-10,W-12,H-10);
+}
+function pdfQuadro(d){
+  const W=210,H=297,P=cfg.pavs.length,n=cfg.blocos,S=cfg.servicos;
+  pdfHeader(d,W,'Quadro geral de serviços',`${n} blocos · ${S.length} serviços · quadradinhos por pavimento: ${cfg.pavs.map((p,i)=>i?String(i):'T').join(' ')}`);
+  pdfLegend(d,12,33);
+  const left=10,labW=16,pcW=10,top=38,headH=34,bottom=H-12;
+  const colW=(W-left*2-labW-pcW)/S.length,rh=Math.min(6,(bottom-top-headH-6)/n);
+  const sq=Math.min((colW-1.5)/P-0.5,rh-1.4),gap=.5;
+  d.setFontSize(7);d.setTextColor(...C.ink);
+  S.forEach((s,i)=>{const x=left+labW+i*colW+colW/2+1.2;let t=(i+1)+'. '+s.nome;while(d.getTextWidth(t)>headH-2&&t.length>4)t=t.slice(0,-2);if(t!==(i+1)+'. '+s.nome)t+='…';d.text(t,x,top+headH-1,{angle:90})});
+  d.setFont('helvetica','bold');d.text('% bloco',left+labW+S.length*colW+pcW/2,top+headH-1,{align:'center'});d.setFont('helvetica','normal');
+  d.setDrawColor(...C.line);d.setLineWidth(.15);
+  for(let b=0;b<n;b++){const y=top+headH+b*rh;
+    if(b%2===0){d.setFillColor(246,248,250);d.rect(left,y,W-left*2,rh,'F')}
+    d.setFontSize(7.5);d.setTextColor(...C.ink);d.text('Bloco '+bn(b),left+1,y+rh/2+1.2);
+    let ok=0,t=0;
+    S.forEach((s,i)=>{const cx=left+labW+i*colW+(colW-(P*sq+(P-1)*gap))/2;
+      for(let p=0;p<P;p++){const k=stOf(b,s.id,p);if(k!=='na'){t++;if(k==='ok')ok++}pdfFloor(d,cx+p*(sq+gap),y+(rh-sq)/2,sq,sq,k)}});
+    d.setFontSize(7);d.setTextColor(...C.muted);d.text((t?Math.round(ok/t*100):0)+'%',left+labW+S.length*colW+pcW/2,y+rh/2+1.2,{align:'center'});
+  }
+  const yf=top+headH+n*rh;d.setDrawColor(...C.ink);d.setLineWidth(.3);d.line(left,yf,W-left,yf);
+  d.setFontSize(7);d.setFont('helvetica','bold');d.setTextColor(...C.ink);d.text('% serviço',left+1,yf+4);
+  S.forEach((s,i)=>d.text(stats(s.id).pct+'%',left+labW+i*colW+colW/2,yf+4,{align:'center'}));d.setFont('helvetica','normal');
+  for(let i=0;i<=S.length;i++){const x=left+labW+i*colW;d.setDrawColor(...C.line);d.setLineWidth(.15);d.line(x,top+4,x,yf+5)}
+}
+async function makePdf(kind,btn){
+  const msg=$('#pdfMsg');
+  if(!window.jspdf){msg.textContent='O gerador de PDF não carregou. Recarregue a página e tente de novo.';return}
+  const {jsPDF}=window.jspdf;let d,name;const stamp=today();
+  const s=cfg.servicos.find(x=>x.id===svc);
+  if(kind==='quadro'){d=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});pdfQuadro(d);name=`quadro-geral-${stamp}.pdf`}
+  else{d=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+    const list=kind==='all'?cfg.servicos:[s];if(!list[0]){msg.textContent='Escolha um serviço primeiro.';return}
+    list.forEach((x,i)=>{if(i)d.addPage('a4','landscape');pdfMapaPage(d,x,kind==='blank')});
+    const slug=t=>t.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+    name=kind==='all'?`mapas-todos-servicos-${stamp}.pdf`:kind==='blank'?`folha-campo-${slug(s.nome)}.pdf`:`mapa-${slug(s.nome)}-${stamp}.pdf`}
+  const data=new Uint8Array(d.output('arraybuffer'));
+  if(!dl){try{dl=await claude?.use?.('downloads')}catch(e){dl=null}}
+  if(!dl){msg.textContent='Esta visualização não permite baixar arquivos. Abra a página no navegador do computador para gerar o PDF.';return}
+  try{await dl.save({filename:name,data});msg.textContent=`PDF “${name}” gerado. Abra e imprima em A4 (tamanho real, sem ajustar à página).`}
+  catch(e){msg.textContent=e?.code==='declined'?'Download cancelado.':e?.code==='host_unavailable'?'Este aplicativo não salva arquivos. Abra a página num navegador ou no computador.':'Não foi possível salvar o PDF ('+(e?.code||'erro')+').'}
+}
+$('#v-imprimir').onclick=e=>{const b=e.target.closest('button[data-pdf]');if(b)makePdf(b.dataset.pdf,b)};
+
+/* ---------- Dados compartilhados ---------- */
+route();
+setSync('busy','Carregando…');
+(async()=>{
+  const timer=setTimeout(()=>setSync('slow','Conexão lenta: mostrando a última cópia salva neste aparelho'),10000);
+  for(let i=0;i<30&&!window.claude;i++)await new Promise(r=>setTimeout(r,100));
+  try{db=window.claude?await claude.use('db'):null}catch(e){db=null}
+  if(!db){clearTimeout(timer);setSync('slow','Sem conexão: marcações ficam só neste aparelho');return}
+  try{user=await claude.use('user');const c=await user?.can?.('data.write');if(c===false){canWrite=false}}catch(e){}
+  db.doc('config/geral').onSnapshot(s=>{if(s.metadata?.fromCache&&!s.exists)return;if(s.exists){const v=s.data();if(v&&Array.isArray(v.servicos)&&Array.isArray(v.pavs))cfg={...DEF_CFG,...v}}saveLocal();render()},()=>{});
+  db.collection('exec').onSnapshot(s=>{
+    if(s.metadata?.fromCache&&s.empty&&Object.keys(cells).length)return;
+    const n={};s.docs.forEach(x=>{const v=x.data();if(v&&v.s)n[x.id]=v});cells=n;
+    if(!s.metadata?.fromCache){clearTimeout(timer);setSync('ok',canWrite?'Sincronizado com a equipe':'Somente leitura')}
+    saveLocal();render();
+  },e=>{clearTimeout(timer);setSync('slow','Conexão perdida: recarregue a página')});
+})();
+</script>
