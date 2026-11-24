@@ -114,10 +114,16 @@ table.q td.p{font-family:var(--f-mono);color:var(--muted)}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
 .field{display:grid;gap:4px}
 .svclist{display:grid;gap:6px;margin:0;padding:0;list-style:none}
-.svclist li{display:flex;gap:6px;align-items:center}
-.svclist li .n{font:500 .75rem var(--f-mono);color:var(--muted);width:22px;text-align:right;flex:none}
-.svclist li input{flex:1 1 auto;min-width:0}
-.svclist li button{padding:6px 8px;flex:none}
+.svclist>li{display:grid;gap:5px}
+.svclist .r{display:flex;gap:6px;align-items:center}
+.svclist .n{font:500 .75rem var(--f-mono);color:var(--muted);width:30px;text-align:right;flex:none}
+.svclist .r input{flex:1 1 auto;min-width:0}
+.svclist .r button{padding:6px 8px;flex:none}
+.svclist ul{list-style:none;margin:0 0 4px;padding:0 0 0 22px;display:grid;gap:5px;border-left:2px solid var(--line);margin-left:14px}
+.svclist ul input{font-size:.92rem;padding:5px 8px}
+.subchips{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.subchips button{padding:4px 10px;font-size:.84rem;border-radius:99px}
+.subchips button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 
 /* Impressão (PDF) */
@@ -155,6 +161,7 @@ textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px soli
 
   <div class="toolbar" id="toolbar">
     <div class="svc-pick" id="svcPickWrap"><label class="label" for="svc">Serviço</label><select id="svc"></select></div>
+    <div class="subchips" id="subChips" role="group" aria-label="Subcategoria" hidden></div>
     <div class="brush" role="group" aria-label="Status a aplicar" id="brush"></div>
     <button id="selMode" aria-pressed="false" title="Marque vários andares e aplique o status de uma vez">Selecionar vários</button>
     <button class="ghost" id="undo" disabled>Desfazer</button>
@@ -249,7 +256,16 @@ const key=(b,s,p)=>`${b}_${s}_${pslug(cfg.pavs[p])}`;
 const shortP=p=>{const n=cfg.pavs[p]||'';const m=n.match(/^\d+/);return m?m[0]:n.charAt(0).toUpperCase()};
 const groundIdx=()=>cfg.pavs.findIndex(n=>/t[ée]rreo/i.test(n));
 const perRow=()=>{const P=cfg.pavs.length;return P>4?Math.ceil(P/2):P};
-const stOf=(b,s,p)=>cells[key(b,s,p)]?.s||'none';
+/* Itens rastreáveis: serviços e suas subcategorias. Serviço com subcategorias mostra o status agregado delas. */
+const SEP=': ';
+function items(){const o=[];cfg.servicos.forEach((s,i)=>{const subs=(s.subs||[]).filter(x=>x&&x.nome);
+  o.push({id:s.id,nome:s.nome,label:s.nome,num:String(i+1),subs,parent:null});
+  subs.forEach((u,j)=>o.push({id:u.id,nome:u.nome,label:s.nome+SEP+u.nome,num:`${i+1}.${j+1}`,subs:[],parent:s.id}))});return o}
+const itemById=id=>items().find(x=>x.id===id)||null;
+function leaves(id){const s=cfg.servicos.find(x=>x.id===id);const subs=(s?.subs||[]).filter(x=>x&&x.nome);return subs.length?subs.map(u=>u.id):[id]}
+function stOf(b,s,p){const L=leaves(s);if(L.length===1&&L[0]===s)return cells[key(b,s,p)]?.s||'none';
+  const v=L.map(id=>cells[key(b,id,p)]?.s||'none').filter(x=>x!=='na');
+  if(!v.length)return 'na';if(v.every(x=>x==='ok'))return 'ok';if(v.some(x=>x==='ok'||x==='and'))return 'and';return 'none'}
 const today=()=>new Date().toISOString().slice(0,10);
 const fmtD=d=>d?d.split('-').reverse().join('/'):'';
 function toast(t){const el=$('#toast');el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,2600)}
@@ -265,14 +281,17 @@ function renderBrush(){
   $('#brush').innerHTML=['ok','and','none','na'].map(k=>`<button aria-pressed="${brush===k}" data-b="${k}"><i class="sw st-${k}"></i>${ST[k].nm}</button>`).join('');
 }
 function renderSvcSelect(){
-  if(!cfg.servicos.some(s=>s.id===svc))svc=cfg.servicos[0]?.id||null;
-  $('#svc').innerHTML=cfg.servicos.map((s,i)=>`<option value="${esc(s.id)}"${s.id===svc?' selected':''}>${i+1}. ${esc(s.nome)}</option>`).join('');
+  const IT=items();if(!IT.some(s=>s.id===svc))svc=IT[0]?.id||null;
+  $('#svc').innerHTML=IT.map(s=>`<option value="${esc(s.id)}"${s.id===svc?' selected':''}>${s.parent?'\u00a0\u00a0\u00a0\u00a0↳ '+s.num+' '+esc(s.nome):s.num+'. '+esc(s.nome)+(s.subs.length?' (geral)':'')}</option>`).join('');
+  const cur=IT.find(x=>x.id===svc),par=cur?(cur.parent?IT.find(x=>x.id===cur.parent):cur):null;
+  const ch=$('#subChips');ch.hidden=!(view==='mapa'&&par&&par.subs.length);
+  if(!ch.hidden)ch.innerHTML='<span class="label">Subcategoria:</span>'+[par,...IT.filter(x=>x.parent===par.id)].map(x=>`<button data-it="${esc(x.id)}" aria-pressed="${x.id===svc}">${x.parent?esc(x.num+' '+x.nome):'Geral (todas)'}</button>`).join('');
 }
 function renderMapa(){
-  const s=cfg.servicos.find(x=>x.id===svc);
+  const s=itemById(svc);
   if(!s){$('#map').innerHTML='<p class="muted">Cadastre um serviço em “Serviços e blocos”.</p>';$('#sumMapa').innerHTML='';return}
   const st=stats(svc), P=cfg.pavs.length;
-  $('#sumMapa').innerHTML=`<div><b>${st.pct}%</b><span class="muted">de ${esc(s.nome)}</span></div>
+  $('#sumMapa').innerHTML=`<div><b>${st.pct}%</b><span class="muted">de ${esc(s.label)}${s.subs.length?' (todas as subcategorias)':''}</span></div>
    <div><b>${st.ok}</b><span class="muted">de ${st.tot} pavimentos executados</span></div>
    <div><b>${st.and}</b><span class="muted">em execução</span></div>
    <div><b>${st.blk}</b><span class="muted">de ${cfg.blocos} blocos concluídos</span></div>
@@ -281,7 +300,7 @@ function renderMapa(){
   rows.forEach((row,ri)=>{if(ri)h+='<div class="rowsep" aria-hidden="true"></div>';
   for(const b of row){
     let fl='';
-    for(let p=P-1;p>=0;p--){const c=cells[key(b,svc,p)];const k=c?.s||'none';
+    for(let p=P-1;p>=0;p--){const c=cells[key(b,svc,p)];const k=stOf(b,svc,p);
       const tip=`Bloco ${bn(b)} · ${cfg.pavs[p]} · ${ST[k].nm}${c?.d?' em '+fmtD(c.d):''}`;
       const gi=groundIdx();fl+=`<button class="fl st-${k}${p===gi?' gnd':''}${gi>0&&p<gi?' fund':''}${selSet.has(sk(b,svc,p))?' sel':''}" data-b="${b}" data-p="${p}" title="${esc(tip)}" aria-label="${esc(tip)}">${esc(shortP(p))}</button>`}
     const pc=blockPct(b,svc);
@@ -298,7 +317,7 @@ function renderQuadro(){
     h+=`<tr${ri&&!ci?' class="g"':''}><th class="b">Bloco ${bn(b)}</th>`;
     const PR=perRow(),ord=[];for(let r=Math.ceil(P/PR)-1;r>=0;r--)for(let c=0;c<PR;c++){const p=r*PR+c;if(p<P)ord.push(p)}
     for(const s of cfg.servicos){h+=`<td><span class="sq" style="--pr:${PR}">`;
-      for(const p of ord){const c=cells[key(b,s.id,p)];const k=c?.s||'none';const tip=`Bloco ${bn(b)} · ${s.nome} · ${cfg.pavs[p]} · ${ST[k].nm}${c?.d?' em '+fmtD(c.d):''}`;
+      for(const p of ord){const c=cells[key(b,s.id,p)];const k=stOf(b,s.id,p);const tip=`Bloco ${bn(b)} · ${s.nome} · ${cfg.pavs[p]} · ${ST[k].nm}${c?.d?' em '+fmtD(c.d):''}`;
         h+=`<button class="st-${k}${selSet.has(sk(b,s.id,p))?' sel':''}" data-b="${b}" data-s="${esc(s.id)}" data-p="${p}" title="${esc(tip)}" aria-label="${esc(tip)}"></button>`}
       h+='</span></td>'}
     h+='</tr>'}
@@ -310,14 +329,14 @@ function renderQuadro(){
 function renderAjustes(){
   if(document.activeElement?.closest?.('#v-ajustes'))return;
   $('#obra').value=cfg.obra||'';$('#nblocos').value=cfg.blocos;$('#pavs').value=cfg.pavs.join(', ');$('#layout').value=fmtLayout(rowsOf().map(r=>r.map(b=>b+1)));
-  draft=cfg.servicos.map(s=>({...s}));renderSvcList();
+  draft=cfg.servicos.map(s=>({...s,subs:(s.subs||[]).map(u=>({...u}))}));renderSvcList();
 }
 let draft=[];
 function renderSvcList(){
   const np=$('#newPos'),keep=np.value;
   np.innerHTML=draft.map((s,i)=>`<option value="${i}">${i+1} · antes de “${esc(s.nome)}”</option>`).join('')+`<option value="${draft.length}">${draft.length+1} · no final</option>`;
   np.value=keep!==''&&+keep<=draft.length?keep:String(draft.length);
-  $('#svclist').innerHTML=draft.map((s,i)=>`<li><span class="n">${i+1}</span><input id="sv-${esc(s.id)}" value="${esc(s.nome)}" data-i="${i}" aria-label="Nome do serviço ${i+1}"><button data-up="${i}" ${i?'':'disabled'} aria-label="Subir">↑</button><button data-dn="${i}" ${i<draft.length-1?'':'disabled'} aria-label="Descer">↓</button><button data-rm="${i}" aria-label="Remover">Remover</button></li>`).join('');
+  $('#svclist').innerHTML=draft.map((s,i)=>`<li><div class="r"><span class="n">${i+1}</span><input id="sv-${esc(s.id)}" value="${esc(s.nome)}" data-i="${i}" aria-label="Nome do serviço ${i+1}"><button data-up="${i}" ${i?'':'disabled'} aria-label="Subir">↑</button><button data-dn="${i}" ${i<draft.length-1?'':'disabled'} aria-label="Descer">↓</button><button data-addsub="${i}" title="Adicionar subcategoria">+ Sub</button><button data-rm="${i}" aria-label="Remover">Remover</button></div>${(s.subs||[]).length?`<ul>${s.subs.map((u,j)=>`<li class="r"><span class="n">${i+1}.${j+1}</span><input id="su-${esc(u.id)}" value="${esc(u.nome)}" data-si="${i}.${j}" placeholder="Nome da subcategoria" aria-label="Subcategoria ${i+1}.${j+1}"><button data-sup="${i}.${j}" ${j?'':'disabled'} aria-label="Subir">↑</button><button data-rmsub="${i}.${j}" aria-label="Remover subcategoria">Remover</button></li>`).join('')}</ul>`:''}</li>`).join('');
 }
 function render(){
   $('#obraLbl').textContent=cfg.obra?cfg.obra:'Controle de execução';
@@ -329,7 +348,7 @@ function render(){
   $('#svcPickWrap').hidden=view==='quadro';
   $$('.view').forEach(v=>v.hidden=v.id!=='v-'+view);
   $$('nav.tabs a').forEach(a=>{if(a.dataset.v===view)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
-  const s=cfg.servicos.find(x=>x.id===svc);$('#pSel').textContent=`A4, 1 folha · ${s?s.nome:'nenhum serviço'}`;$('#pAll').textContent=`A4, ${cfg.servicos.length} folhas (1 por serviço)`;
+  const s=itemById(svc),NI=items().length;$('#pSel').textContent=`A4, 1 folha · ${s?s.label:'nenhum serviço'}`;$('#pAll').textContent=`A4, ${NI} folhas (1 por serviço e 1 por subcategoria)`;
   $('#undo').disabled=!lastUndo;
   if(view==='mapa')renderMapa();if(view==='quadro')renderQuadro();if(view==='ajustes')renderAjustes();
 }
@@ -338,7 +357,8 @@ function render(){
 async function paint(list){ // list of [b,sid,p]
   if(!canWrite){toast('Você tem acesso só de leitura a esta página.');return}
   const prev=[];const writes=[];
-  for(const [b,s,p] of list){const k=key(b,s,p);const cur=cells[k]||null;
+  const exp=[];for(const [b,s,p] of list)for(const id of leaves(s))exp.push([b,id,p]);
+  for(const [b,s,p] of exp){const k=key(b,s,p);const cur=cells[k]||null;
     if((cur?.s||'none')===brush)continue;prev.push([k,cur]);
     const val=brush==='none'?null:{s:brush,d:today(),b:+b,sv:s,p:+p};
     if(val)cells[k]=val;else delete cells[k];writes.push([k,val])}
@@ -353,6 +373,7 @@ async function push(writes){
 $('#undo').onclick=async()=>{if(!lastUndo)return;const w=[];for(const [k,v] of lastUndo){if(v)cells[k]=v;else delete cells[k];w.push([k,v])}lastUndo=null;saveLocal();render();await push(w);toast('Desfeito')};
 $('#brush').onclick=e=>{const b=e.target.closest('button[data-b]');if(!b)return;brush=b.dataset.b;saveLocal();renderBrush();renderSel()};
 $('#svc').onchange=e=>{svc=e.target.value;selSet.clear();saveLocal();render()};
+$('#subChips').onclick=e=>{const b=e.target.closest('button[data-it]');if(!b)return;svc=b.dataset.it;selSet.clear();saveLocal();render()};
 /* ---------- Seleção múltipla ---------- */
 function renderSel(){
   document.body.classList.toggle('selmode',selMode);
@@ -390,8 +411,11 @@ $('#selQuick').onclick=e=>{const b=e.target.closest('button[data-lv]');if(!b||!s
 $('#selApply').onclick=async()=>{if(!selSet.size)return;const list=[...selSet].map(x=>x.split('|'));const n=list.length;selSet.clear();await paint(list);render();toast(`“${ST[brush].nm}” aplicado a ${n} ${n===1?'andar':'andares'}. Use Desfazer se errou.`)};
 
 /* ---------- Ajustes ---------- */
-$('#svclist').oninput=e=>{const i=e.target.dataset.i;if(i!=null)draft[i].nome=e.target.value};
-$('#svclist').onclick=e=>{const t=e.target;let i;
+$('#svclist').oninput=e=>{const i=e.target.dataset.i;if(i!=null)draft[i].nome=e.target.value;const si=e.target.dataset.si;if(si){const [a,b]=si.split('.').map(Number);draft[a].subs[b].nome=e.target.value}};
+$('#svclist').onclick=e=>{const t=e.target.closest('button');if(!t)return;let i;
+  if((i=t.dataset.addsub)!=null){const sv=draft[+i];sv.subs=sv.subs||[];const id='u'+Date.now().toString(36);sv.subs.push({id,nome:''});renderSvcList();$('#su-'+id)?.focus();$('#cfgMsg').textContent='Digite o nome da subcategoria e clique em Salvar ajustes.';return}
+  if((i=t.dataset.rmsub)!=null){const [a,b]=i.split('.').map(Number);draft[a].subs.splice(b,1);renderSvcList();return}
+  if((i=t.dataset.sup)!=null){const [a,b]=i.split('.').map(Number);const L=draft[a].subs;[L[b-1],L[b]]=[L[b],L[b-1]];renderSvcList();return}
   if((i=t.dataset.up)!=null){i=+i;[draft[i-1],draft[i]]=[draft[i],draft[i-1]]}
   else if((i=t.dataset.dn)!=null){i=+i;[draft[i+1],draft[i]]=[draft[i],draft[i+1]]}
   else if((i=t.dataset.rm)!=null){draft.splice(+i,1)}else return;renderSvcList()};
@@ -400,7 +424,7 @@ $('#newSvc').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('#addSvc').c
 $('#saveCfg').onclick=async()=>{
   const nb=Math.max(1,Math.min(200,parseInt($('#nblocos').value)||39));
   const pv=$('#pavs').value.split(',').map(s=>s.trim()).filter(Boolean);
-  const sv=draft.map(s=>({id:s.id,nome:s.nome.trim()})).filter(s=>s.nome);
+  const sv=draft.map(s=>({id:s.id,nome:s.nome.trim(),subs:(s.subs||[]).map(u=>({id:u.id,nome:u.nome.trim()})).filter(u=>u.nome)})).filter(s=>s.nome);
   if(!pv.length){$('#cfgMsg').textContent='Informe ao menos um pavimento.';return}
   if(!sv.length){$('#cfgMsg').textContent='Informe ao menos um serviço.';return}
   const lay=parseLayout($('#layout').value);
@@ -436,7 +460,7 @@ function pdfHeader(d,W,title,sub){
 function pdfMapaPage(d,s,blank){
   const W=d.internal.pageSize.getWidth(),H=d.internal.pageSize.getHeight(),P=cfg.pavs.length,n=cfg.blocos,port=H>W;
   const st=blank?null:stats(s.id);
-  pdfHeader(d,W,s.nome,blank?'Folha de campo: pinte cada andar à caneta conforme a legenda.':`${st.pct}% executado · ${st.ok} de ${st.tot} pavimentos · ${st.and} em execução · ${st.blk} de ${n} blocos concluídos`);
+  pdfHeader(d,W,s.label+(s.subs?.length?' (geral)':''),blank?'Folha de campo: pinte cada andar à caneta conforme a legenda.':`${st.pct}% executado · ${st.ok} de ${st.tot} pavimentos · ${st.and} em execução · ${st.blk} de ${n} blocos concluídos`);
   if(port)pdfLegend(d,12,34);else pdfLegend(d,W-12-106,26);
   const RW=rowsOf(),top=port?40:36,bottom=H-24,left=24,right=W-12;
   const cols=Math.max(...RW.map(r=>r.length)),rows=RW.length;
@@ -485,13 +509,13 @@ async function makePdf(kind,btn){
   const msg=$('#pdfMsg');
   if(!window.jspdf){msg.textContent='O gerador de PDF não carregou. Recarregue a página e tente de novo.';return}
   const {jsPDF}=window.jspdf;let d,name;const stamp=today();
-  const s=cfg.servicos.find(x=>x.id===svc);
+  const s=itemById(svc);
   if(kind==='quadro'){d=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});pdfQuadro(d);name=`quadro-geral-${stamp}.pdf`}
   else{const RW=rowsOf(),ori=RW.length>Math.max(...RW.map(r=>r.length))*0.9?'portrait':'landscape';d=new jsPDF({orientation:ori,unit:'mm',format:'a4'});
-    const list=kind==='all'?cfg.servicos:[s];if(!list[0]){msg.textContent='Escolha um serviço primeiro.';return}
+    const list=kind==='all'?items():[s];if(!list[0]){msg.textContent='Escolha um serviço primeiro.';return}
     list.forEach((x,i)=>{if(i)d.addPage('a4',ori);pdfMapaPage(d,x,kind==='blank')});
     const slug=t=>t.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
-    name=kind==='all'?`mapas-todos-servicos-${stamp}.pdf`:kind==='blank'?`folha-campo-${slug(s.nome)}.pdf`:`mapa-${slug(s.nome)}-${stamp}.pdf`}
+    name=kind==='all'?`mapas-todos-servicos-${stamp}.pdf`:kind==='blank'?`folha-campo-${slug(s.label)}.pdf`:`mapa-${slug(s.label)}-${stamp}.pdf`}
   const data=new Uint8Array(d.output('arraybuffer'));
   if(!dl){try{dl=await claude?.use?.('downloads')}catch(e){dl=null}}
   if(!dl){msg.textContent='Esta visualização não permite baixar arquivos. Abra a página no navegador do computador para gerar o PDF.';return}
