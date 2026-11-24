@@ -117,7 +117,11 @@ table.q td.p{font-family:var(--f-mono);color:var(--muted)}
 .svclist>li{display:grid;gap:5px}
 .svclist .r{display:flex;gap:6px;align-items:center}
 .svclist .n{font:500 .75rem var(--f-mono);color:var(--muted);width:30px;text-align:right;flex:none}
-.svclist .r input{flex:1 1 auto;min-width:0}
+.svclist .r input{flex:2 1 160px;min-width:0}
+.svclist .r input.emp{flex:1 1 120px}
+.svclist>li>.r{flex-wrap:wrap}
+.empline{display:flex;gap:8px;align-items:baseline}
+.empline b{font-family:var(--f-head);font-size:1rem;font-weight:600}
 .svclist .r button{padding:6px 8px;flex:none}
 .svclist ul{list-style:none;margin:0 0 4px;padding:0 0 0 22px;display:grid;gap:5px;border-left:2px solid var(--line);margin-left:14px}
 .svclist ul input{font-size:.92rem;padding:5px 8px}
@@ -213,6 +217,8 @@ textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px soli
       <div class="field">
         <span class="label">Serviços (na ordem de execução)</span>
         <ul class="svclist" id="svclist"></ul>
+        <datalist id="empList"></datalist>
+        <span class="note">Empreiteiro: quem executa o serviço. Na subcategoria, deixe em branco para usar o mesmo do serviço.</span>
         <div class="row"><input id="newSvc" placeholder="Novo serviço, ex.: Arremates de reboco" style="flex:1 1 220px;width:auto;min-width:0"><label class="label" for="newPos">Na linha</label><select id="newPos" style="width:auto;max-width:100%;min-width:0"></select><button id="addSvc">Adicionar</button></div>
       </div>
       <div class="row"><button class="primary" id="saveCfg">Salvar ajustes</button><span class="note" id="cfgMsg"></span></div>
@@ -259,8 +265,9 @@ const perRow=()=>{const P=cfg.pavs.length;return P>4?Math.ceil(P/2):P};
 /* Itens rastreáveis: serviços e suas subcategorias. Serviço com subcategorias mostra o status agregado delas. */
 const SEP=': ';
 function items(){const o=[];cfg.servicos.forEach((s,i)=>{const subs=(s.subs||[]).filter(x=>x&&x.nome);
-  o.push({id:s.id,nome:s.nome,label:s.nome,num:String(i+1),subs,parent:null});
-  subs.forEach((u,j)=>o.push({id:u.id,nome:u.nome,label:s.nome+SEP+u.nome,num:`${i+1}.${j+1}`,subs:[],parent:s.id}))});return o}
+  const se=(s.emp||'').trim();
+  o.push({id:s.id,nome:s.nome,label:s.nome,num:String(i+1),subs,parent:null,emp:se||[...new Set(subs.map(u=>(u.emp||'').trim()).filter(Boolean))].join(', ')});
+  subs.forEach((u,j)=>o.push({id:u.id,nome:u.nome,label:s.nome+SEP+u.nome,num:`${i+1}.${j+1}`,subs:[],parent:s.id,emp:(u.emp||'').trim()||se}))});return o}
 const itemById=id=>items().find(x=>x.id===id)||null;
 function leaves(id){const s=cfg.servicos.find(x=>x.id===id);const subs=(s?.subs||[]).filter(x=>x&&x.nome);return subs.length?subs.map(u=>u.id):[id]}
 function stOf(b,s,p){const L=leaves(s);if(L.length===1&&L[0]===s)return cells[key(b,s,p)]?.s||'none';
@@ -295,6 +302,7 @@ function renderMapa(){
    <div><b>${st.ok}</b><span class="muted">de ${st.tot} pavimentos executados</span></div>
    <div><b>${st.and}</b><span class="muted">em execução</span></div>
    <div><b>${st.blk}</b><span class="muted">de ${cfg.blocos} blocos concluídos</span></div>
+   <div class="empline"><span class="muted">Empreiteiro:</span>${s.emp?`<b>${esc(s.emp)}</b>`:'<a href="#ajustes">não informado</a>'}</div>
    <div class="bar" aria-hidden="true"><span style="width:${st.tot?st.ok/st.tot*100:0}%;background:var(--ok)"></span><span style="width:${st.tot?st.and/st.tot*100:0}%;background:var(--and)"></span></div>`;
   let h='';const rows=rowsOf(),cols=Math.max(...rows.map(r=>r.length));$('#map').style.setProperty('--cols',cols);
   rows.forEach((row,ri)=>{if(ri)h+='<div class="rowsep" aria-hidden="true"></div>';
@@ -312,7 +320,7 @@ function renderMapa(){
 function renderQuadro(){
   const P=cfg.pavs.length;
   $('#legQ').innerHTML=['ok','and','none','na'].map(k=>`<span><i class="sw st-${k}"></i>${ST[k].nm}</span>`).join('');
-  let h=`<thead><tr><th class="b">Bloco</th>${cfg.servicos.map((s,i)=>`<th class="v" title="${esc(s.nome)}"><span>${i+1}. ${esc(s.nome)}</span></th>`).join('')}</tr></thead><tbody>`;
+  let h=`<thead><tr><th class="b">Bloco</th>${cfg.servicos.map((s,i)=>`<th class="v" title="${esc(s.nome)}${itemById(s.id)?.emp?' · Empreiteiro: '+esc(itemById(s.id).emp):''}"><span>${i+1}. ${esc(s.nome)}</span></th>`).join('')}</tr></thead><tbody>`;
   for(const [ri,row] of rowsOf().entries())for(const [ci,b] of row.entries()){
     h+=`<tr${ri&&!ci?' class="g"':''}><th class="b">Bloco ${bn(b)}</th>`;
     const PR=perRow(),ord=[];for(let r=Math.ceil(P/PR)-1;r>=0;r--)for(let c=0;c<PR;c++){const p=r*PR+c;if(p<P)ord.push(p)}
@@ -333,10 +341,12 @@ function renderAjustes(){
 }
 let draft=[];
 function renderSvcList(){
+  const names=[...new Set(draft.flatMap(s=>[s.emp,...(s.subs||[]).map(u=>u.emp)]).map(x=>(x||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));
+  $('#empList').innerHTML=names.map(n=>`<option value="${esc(n)}"></option>`).join('');
   const np=$('#newPos'),keep=np.value;
   np.innerHTML=draft.map((s,i)=>`<option value="${i}">${i+1} · antes de “${esc(s.nome)}”</option>`).join('')+`<option value="${draft.length}">${draft.length+1} · no final</option>`;
   np.value=keep!==''&&+keep<=draft.length?keep:String(draft.length);
-  $('#svclist').innerHTML=draft.map((s,i)=>`<li><div class="r"><span class="n">${i+1}</span><input id="sv-${esc(s.id)}" value="${esc(s.nome)}" data-i="${i}" aria-label="Nome do serviço ${i+1}"><button data-up="${i}" ${i?'':'disabled'} aria-label="Subir">↑</button><button data-dn="${i}" ${i<draft.length-1?'':'disabled'} aria-label="Descer">↓</button><button data-addsub="${i}" title="Adicionar subcategoria">+ Sub</button><button data-rm="${i}" aria-label="Remover">Remover</button></div>${(s.subs||[]).length?`<ul>${s.subs.map((u,j)=>`<li class="r"><span class="n">${i+1}.${j+1}</span><input id="su-${esc(u.id)}" value="${esc(u.nome)}" data-si="${i}.${j}" placeholder="Nome da subcategoria" aria-label="Subcategoria ${i+1}.${j+1}"><button data-sup="${i}.${j}" ${j?'':'disabled'} aria-label="Subir">↑</button><button data-rmsub="${i}.${j}" aria-label="Remover subcategoria">Remover</button></li>`).join('')}</ul>`:''}</li>`).join('');
+  $('#svclist').innerHTML=draft.map((s,i)=>`<li><div class="r"><span class="n">${i+1}</span><input id="sv-${esc(s.id)}" value="${esc(s.nome)}" data-i="${i}" aria-label="Nome do serviço ${i+1}"><input class="emp" id="se-${esc(s.id)}" value="${esc(s.emp||'')}" data-ei="${i}" list="empList" placeholder="Empreiteiro" aria-label="Empreiteiro do serviço ${i+1}"><button data-up="${i}" ${i?'':'disabled'} aria-label="Subir">↑</button><button data-dn="${i}" ${i<draft.length-1?'':'disabled'} aria-label="Descer">↓</button><button data-addsub="${i}" title="Adicionar subcategoria">+ Sub</button><button data-rm="${i}" aria-label="Remover">Remover</button></div>${(s.subs||[]).length?`<ul>${s.subs.map((u,j)=>`<li class="r"><span class="n">${i+1}.${j+1}</span><input id="su-${esc(u.id)}" value="${esc(u.nome)}" data-si="${i}.${j}" placeholder="Nome da subcategoria" aria-label="Subcategoria ${i+1}.${j+1}"><input class="emp" id="sue-${esc(u.id)}" value="${esc(u.emp||'')}" data-sei="${i}.${j}" list="empList" placeholder="${esc(s.emp?'Mesmo: '+s.emp:'Empreiteiro')}" aria-label="Empreiteiro da subcategoria ${i+1}.${j+1}"><button data-sup="${i}.${j}" ${j?'':'disabled'} aria-label="Subir">↑</button><button data-rmsub="${i}.${j}" aria-label="Remover subcategoria">Remover</button></li>`).join('')}</ul>`:''}</li>`).join('');
 }
 function render(){
   $('#obraLbl').textContent=cfg.obra?cfg.obra:'Controle de execução';
@@ -411,7 +421,8 @@ $('#selQuick').onclick=e=>{const b=e.target.closest('button[data-lv]');if(!b||!s
 $('#selApply').onclick=async()=>{if(!selSet.size)return;const list=[...selSet].map(x=>x.split('|'));const n=list.length;selSet.clear();await paint(list);render();toast(`“${ST[brush].nm}” aplicado a ${n} ${n===1?'andar':'andares'}. Use Desfazer se errou.`)};
 
 /* ---------- Ajustes ---------- */
-$('#svclist').oninput=e=>{const i=e.target.dataset.i;if(i!=null)draft[i].nome=e.target.value;const si=e.target.dataset.si;if(si){const [a,b]=si.split('.').map(Number);draft[a].subs[b].nome=e.target.value}};
+$('#svclist').oninput=e=>{const i=e.target.dataset.i;if(i!=null)draft[i].nome=e.target.value;const si=e.target.dataset.si;if(si){const [a,b]=si.split('.').map(Number);draft[a].subs[b].nome=e.target.value}
+  const ei=e.target.dataset.ei;if(ei!=null)draft[ei].emp=e.target.value;const sei=e.target.dataset.sei;if(sei){const [a,b]=sei.split('.').map(Number);draft[a].subs[b].emp=e.target.value}};
 $('#svclist').onclick=e=>{const t=e.target.closest('button');if(!t)return;let i;
   if((i=t.dataset.addsub)!=null){const sv=draft[+i];sv.subs=sv.subs||[];const id='u'+Date.now().toString(36);sv.subs.push({id,nome:''});renderSvcList();$('#su-'+id)?.focus();$('#cfgMsg').textContent='Digite o nome da subcategoria e clique em Salvar ajustes.';return}
   if((i=t.dataset.rmsub)!=null){const [a,b]=i.split('.').map(Number);draft[a].subs.splice(b,1);renderSvcList();return}
@@ -424,7 +435,7 @@ $('#newSvc').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('#addSvc').c
 $('#saveCfg').onclick=async()=>{
   const nb=Math.max(1,Math.min(200,parseInt($('#nblocos').value)||39));
   const pv=$('#pavs').value.split(',').map(s=>s.trim()).filter(Boolean);
-  const sv=draft.map(s=>({id:s.id,nome:s.nome.trim(),subs:(s.subs||[]).map(u=>({id:u.id,nome:u.nome.trim()})).filter(u=>u.nome)})).filter(s=>s.nome);
+  const sv=draft.map(s=>({id:s.id,nome:s.nome.trim(),emp:(s.emp||'').trim(),subs:(s.subs||[]).map(u=>({id:u.id,nome:u.nome.trim(),emp:(u.emp||'').trim()})).filter(u=>u.nome)})).filter(s=>s.nome);
   if(!pv.length){$('#cfgMsg').textContent='Informe ao menos um pavimento.';return}
   if(!sv.length){$('#cfgMsg').textContent='Informe ao menos um serviço.';return}
   const lay=parseLayout($('#layout').value);
@@ -461,8 +472,9 @@ function pdfMapaPage(d,s,blank){
   const W=d.internal.pageSize.getWidth(),H=d.internal.pageSize.getHeight(),P=cfg.pavs.length,n=cfg.blocos,port=H>W;
   const st=blank?null:stats(s.id);
   pdfHeader(d,W,s.label+(s.subs?.length?' (geral)':''),blank?'Folha de campo: pinte cada andar à caneta conforme a legenda.':`${st.pct}% executado · ${st.ok} de ${st.tot} pavimentos · ${st.and} em execução · ${st.blk} de ${n} blocos concluídos`);
-  if(port)pdfLegend(d,12,34);else pdfLegend(d,W-12-106,26);
-  const RW=rowsOf(),top=port?40:36,bottom=H-24,left=24,right=W-12;
+  d.setFontSize(10);d.setTextColor(...C.ink);d.setFont('helvetica','bold');d.text('Empreiteiro: '+(s.emp||'______________________________'),12,33);d.setFont('helvetica','normal');
+  if(port)pdfLegend(d,12,40);else pdfLegend(d,W-12-106,33);
+  const RW=rowsOf(),top=port?45:39,bottom=H-24,left=24,right=W-12;
   const cols=Math.max(...RW.map(r=>r.length)),rows=RW.length;
   const cw=(right-left)/cols,rh=(bottom-top)/rows;
   const bw=Math.min(cw*.72,18),lab=4.5,pctH=blank?1:3.5,fh=Math.min((rh-lab-pctH-2.5)/P,11),gi=groundIdx();
