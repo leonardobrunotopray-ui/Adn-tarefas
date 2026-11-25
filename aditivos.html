@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-/* Layout: painel operacional — régua do fluxo (16 etapas) no topo, fila de aditivos em cartões abaixo, detalhe em diálogo. */
+/* Layout: painel operacional — régua do fluxo (17 etapas) no topo, fila de aditivos em cartões abaixo, detalhe em diálogo. */
 :root{
   --bg:#eef1f4; --surface:#ffffff; --surface-2:#f6f8fa; --ink:#16202a; --muted:#5a6774; --line:#d6dce3;
   --accent:#1c5d8f; --accent-soft:#e3eef7; --accent-ink:#ffffff;
@@ -55,7 +55,7 @@ header.top p{margin:4px 0 0;color:var(--muted);max-width:62ch}
 
 /* Régua do fluxo */
 .flow{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
-.flow ol{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(16,minmax(84px,1fr));min-width:1380px}
+.flow ol{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(17,minmax(84px,1fr));min-width:1460px}
 .flow li{border-right:1px solid var(--line)}
 .flow li:last-child{border-right:0}
 .flow button{width:100%;height:100%;border:0;border-radius:0;background:transparent;text-align:left;padding:10px 10px 12px;display:grid;gap:4px;align-content:start;position:relative}
@@ -92,7 +92,7 @@ textarea{resize:vertical;min-height:70px}
 .card-top h3{overflow-wrap:anywhere}
 .meta{margin:2px 0 0;color:var(--muted);font-size:.84rem;overflow-wrap:anywhere}
 .val{font-family:var(--f-mono);font-size:.88rem;white-space:nowrap}
-.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(16,1fr);gap:3px}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(17,1fr);gap:3px}
 .steps li{height:6px;border-radius:2px;background:var(--line)}
 .steps li.done{background:var(--accent)}
 .steps li.cur{background:var(--accent);opacity:.45;outline:1px solid var(--accent)}
@@ -376,6 +376,7 @@ const STAGES=[
  {k:'encerrar',n:'Encerrar cotação',a:'Encerrar a cotação no Mega.',sla:1,who:'Você'},
  {k:'saldo',n:'Pedir saldo',a:'Pedir por e-mail ao {setor} que suba o saldo no contrato existente.',sla:2,who:'Você'},
  {k:'assinatura',n:'Assinaturas',a:'Contrato gerado pelo {setor}: acompanhar a assinatura de todas as partes.',sla:7,who:'{setor}'},
+ {k:'saldo_sistema',n:'Saldo no sistema',a:'Contrato assinado: aguardar o saldo entrar no sistema para poder medir.',sla:2,who:'{setor}'},
  {k:'liberado',n:'Liberado p/ medir',a:'Saldo no contrato, pronto para medição.',sla:0,who:'—'}
 ];
 const IDX=Object.fromEntries(STAGES.map((s,i)=>[s.k,i]));
@@ -539,7 +540,7 @@ function render(){
   renderBulk();
   const active=rows.filter(d=>!d.arquivado&&d.etapa!=='liberado');
   const late=active.filter(d=>status(d).late);
-  const waitOthers=active.filter(d=>['levantamento','negociacao','criar_insumo','aprov_controle','reaprovacao','aprov_gestao','aprov_suprimentos','assinatura'].includes(d.etapa)||(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk));
+  const waitOthers=active.filter(d=>['levantamento','negociacao','criar_insumo','aprov_controle','reaprovacao','aprov_gestao','aprov_suprimentos','assinatura','saldo_sistema'].includes(d.etapa)||(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk));
   const total=active.reduce((s,d)=>s+(typeof d.valor==='number'?d.valor:0),0);
   const liberadosMes=rows.filter(d=>d.etapa==='liberado'&&(d.entradas?.liberado||'').slice(0,7)===today().slice(0,7)).length;
   $('#summary').innerHTML=loaded?`
