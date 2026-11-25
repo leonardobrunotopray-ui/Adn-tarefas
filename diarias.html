@@ -1,0 +1,384 @@
+<title>Diárias de Máquinas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: boletim mensal de equipamentos — resumo do mês no topo, grade máquina × dia (como o boletim de medição de locação), cadastro em diálogo. Mesmos tokens do painel de Aditivos. */
+:root{
+  --bg:#eef1f4; --surface:#ffffff; --surface-2:#f6f8fa; --ink:#16202a; --muted:#5a6774; --line:#d6dce3;
+  --accent:#1c5d8f; --accent-soft:#e3eef7; --accent-ink:#ffffff;
+  --ok:#2c7a4b; --ok-soft:#e2f2e8; --warn:#a86c12; --warn-soft:#fbf0dc; --bad:#b83227; --bad-soft:#fae4e1;
+  --wk:#e9edf1;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-head:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --r:8px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1318; --surface:#161e26; --surface-2:#1c252e; --ink:#e4eaf0; --muted:#93a0ad; --line:#2a3541;
+  --accent:#62a6da; --accent-soft:#1b3347; --accent-ink:#0b1620;
+  --ok:#5cc08a; --ok-soft:#173326; --warn:#e3aa4c; --warn-soft:#3a2c13; --bad:#f0776a; --bad-soft:#3d1c19;
+  --wk:#121920; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1318; --surface:#161e26; --surface-2:#1c252e; --ink:#e4eaf0; --muted:#93a0ad; --line:#2a3541;
+  --accent:#62a6da; --accent-soft:#1b3347; --accent-ink:#0b1620;
+  --ok:#5cc08a; --ok-soft:#173326; --warn:#e3aa4c; --warn-soft:#3a2c13; --bad:#f0776a; --bad-soft:#3d1c19;
+  --wk:#121920; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45}
+.wrap{max-width:1400px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:16px}
+h1,h2{font-family:var(--f-head);font-weight:600;text-wrap:balance;margin:0}
+h1{font-size:1.65rem;letter-spacing:-.01em}
+h2{font-size:1.1rem}
+.mono,.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.label{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:500}
+
+button{font:inherit;font-weight:500;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:7px 12px;cursor:pointer;line-height:1.2}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.ghost{background:transparent;border-color:transparent;color:var(--accent);padding-inline:8px}
+button.ghost:hover{background:var(--accent-soft)}
+button.danger{color:var(--bad);border-color:var(--bad)}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}
+textarea{resize:vertical;min-height:60px}
+
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+header.top p{margin:4px 0 0;color:var(--muted);max-width:62ch}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.month{display:flex;align-items:center;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:2px}
+.month button{border:0;padding:6px 10px}
+.month b{font-family:var(--f-head);font-weight:600;min-width:9.5em;text-align:center;font-size:1rem}
+
+.summary{display:flex;flex-wrap:wrap;gap:8px 28px;align-items:baseline}
+.summary div{display:flex;gap:8px;align-items:baseline}
+.summary b{font-family:var(--f-mono);font-size:1.25rem;font-weight:500}
+.summary .warn b{color:var(--warn)}
+
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.filters input{flex:1 1 220px;min-width:0}
+.filters select{width:auto;max-width:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.8rem;color:var(--muted);align-items:center}
+.legend span{display:inline-flex;gap:6px;align-items:center}
+.legend i{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:4px;font-style:normal;font-family:var(--f-mono);font-size:.75rem;border:1px solid var(--line)}
+
+/* Grade */
+.grid{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+table{border-collapse:separate;border-spacing:0;width:100%;font-size:.85rem}
+th,td{border-bottom:1px solid var(--line);padding:0;text-align:center;white-space:nowrap;background:var(--surface)}
+thead th{position:sticky;top:0;z-index:2;font-weight:500;color:var(--muted);font-size:.72rem;padding:6px 0;background:var(--surface-2)}
+thead th.day{width:30px;min-width:30px}
+thead th.day small{display:block;font-size:.62rem;text-transform:lowercase}
+thead th.we,td.we{background:var(--wk)}
+thead th.today{color:var(--accent);box-shadow:inset 0 -3px 0 var(--accent)}
+.sticky{position:sticky;left:0;z-index:1;text-align:left}
+thead .sticky{z-index:3}
+th.mq,td.mq{min-width:200px;max-width:240px;padding:8px 10px;border-right:1px solid var(--line)}
+td.mq button{all:unset;cursor:pointer;display:grid;gap:1px;max-width:220px}
+td.mq button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+td.mq .nm{font-weight:600;white-space:normal;line-height:1.25}
+td.mq .sub{font-size:.75rem;color:var(--muted);white-space:normal}
+td.mq button:hover .nm{color:var(--accent)}
+td.cb,th.cb{padding:6px 6px;min-width:96px}
+td.vl,th.vl{padding:6px 6px;min-width:120px;border-right:1px solid var(--line)}
+td.cb select,td.vl input{padding:5px 6px;font-size:.82rem}
+td.vl input{font-family:var(--f-mono);text-align:right}
+td.vl input:placeholder-shown{background:var(--warn-soft);border-color:var(--warn)}
+td.vl .per{display:block;font-size:.66rem;color:var(--muted);text-align:right;margin-top:2px}
+td.d{padding:2px}
+td.d button{width:26px;height:28px;padding:0;border-radius:4px;border:1px solid transparent;background:transparent;font-family:var(--f-mono);font-size:.78rem;color:var(--muted)}
+td.d button:hover{border-color:var(--accent)}
+td.d button.s1{background:var(--ok-soft);color:var(--ok);border-color:var(--ok);font-weight:600}
+td.d button.sh{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+td.d button.sp{background:var(--bad-soft);color:var(--bad);border-color:var(--bad)}
+td.d.out button{opacity:.35}
+td.tt,th.tt{padding:6px 10px;border-left:1px solid var(--line);text-align:right;font-family:var(--f-mono)}
+td.tt small{display:block;color:var(--muted);font-size:.68rem;font-family:var(--f-body)}
+tfoot td{background:var(--surface-2);font-weight:600;padding:8px 10px}
+tfoot td.sticky{text-align:left}
+
+.empty{padding:36px 20px;text-align:center;color:var(--muted);display:grid;gap:10px;justify-items:center}
+.note{font-size:.8rem;color:var(--muted)}
+.note.warn{color:var(--warn)}
+
+dialog{border:1px solid var(--line);border-radius:10px;padding:0;background:var(--surface);color:var(--ink);width:min(560px,calc(100vw - 32px));max-height:calc(100dvh - 32px)}
+dialog::backdrop{background:rgb(10 16 22 / .45)}
+dialog form{display:grid;gap:14px;padding:18px}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fields .full{grid-column:1/-1}
+.field{display:grid;gap:4px;min-width:0}
+.dlg-foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:center}
+.dlg-foot div{display:flex;gap:8px;flex-wrap:wrap}
+.confirm{background:var(--bad-soft);border:1px solid var(--bad);border-radius:6px;padding:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:6px;font-size:.88rem;z-index:20;max-width:calc(100vw - 32px)}
+@media (max-width:560px){.fields{grid-template-columns:1fr}.month b{min-width:7.5em}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Diárias de Máquinas</h1>
+      <p>Marque os dias que cada máquina trabalhou. O valor fica em branco até você preencher, por diária ou por mês.</p>
+    </div>
+    <div class="actions">
+      <div class="month" role="group" aria-label="Mês">
+        <button type="button" id="prev" aria-label="Mês anterior">◀</button>
+        <b id="mlabel">—</b>
+        <button type="button" id="next" aria-label="Próximo mês">▶</button>
+      </div>
+      <button type="button" id="csv">Exportar CSV</button>
+      <button type="button" class="primary" id="add">Nova máquina</button>
+    </div>
+  </header>
+
+  <section class="summary" aria-label="Resumo do mês">
+    <div><span class="label">Máquinas no mês</span><b id="s_maq">0</b></div>
+    <div><span class="label">Diárias</span><b id="s_dia">0</b></div>
+    <div><span class="label">Paradas</span><b id="s_par">0</b></div>
+    <div><span class="label">Total estimado</span><b id="s_tot">R$ 0,00</b></div>
+    <div class="warn" id="s_semw"><span class="label">Sem valor</span><b id="s_sem">0</b></div>
+  </section>
+
+  <div class="filters">
+    <input type="search" id="q" placeholder="Buscar máquina, placa, fornecedor…" aria-label="Buscar">
+    <select id="f_obra" aria-label="Obra"><option value="">Todas as obras</option></select>
+    <select id="f_tipo" aria-label="Cobrança"><option value="">Diária e mensal</option><option value="diaria">Só diária</option><option value="mensal">Só mensal</option></select>
+  </div>
+  <div class="legend" aria-label="Legenda">
+    <span>Clique no dia para alternar:</span>
+    <span><i class="mono">·</i>vazio</span>
+    <span><i class="mono" style="background:var(--ok-soft);color:var(--ok);border-color:var(--ok)">1</i>diária</span>
+    <span><i class="mono" style="background:var(--accent-soft);color:var(--accent);border-color:var(--accent)">½</i>meia diária</span>
+    <span><i class="mono" style="background:var(--bad-soft);color:var(--bad);border-color:var(--bad)">P</i>parada (não cobra)</span>
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <p class="note" id="mode"></p>
+</div>
+
+<dialog id="dlg" aria-labelledby="dlg_t">
+  <form id="frm" method="dialog">
+    <h2 id="dlg_t">Nova máquina</h2>
+    <div class="fields">
+      <label class="field full"><span class="label">Máquina / equipamento</span><input id="m_nome" required placeholder="Ex.: Retroescavadeira 416F"></label>
+      <label class="field"><span class="label">Placa / patrimônio</span><input id="m_ident" placeholder="Ex.: CAT-0231"></label>
+      <label class="field"><span class="label">Fornecedor</span><input id="m_forn" placeholder="Ex.: Locadora Alfa"></label>
+      <label class="field"><span class="label">Obra</span><input id="m_obra" list="obras" placeholder="Ex.: Residencial Jardins"></label>
+      <label class="field"><span class="label">Cobrança</span>
+        <select id="m_tipo"><option value="diaria">Por diária</option><option value="mensal">Mensal</option></select></label>
+      <label class="field"><span class="label" id="m_vlab">Valor da diária (R$)</span><input id="m_valor" inputmode="decimal" placeholder="em branco"></label>
+      <label class="field"><span class="label">Chegada na obra</span><input type="date" id="m_ini"></label>
+      <label class="field"><span class="label">Devolução</span><input type="date" id="m_fim"></label>
+      <label class="field full"><span class="label">Observações</span><textarea id="m_obs" placeholder="Operador incluso, combustível, franquia de horas…"></textarea></label>
+    </div>
+    <p class="note" id="m_hint">Por diária: total = diárias marcadas × valor. Mensal: valor do mês proporcional aos dias em que a máquina esteve na obra.</p>
+    <div class="confirm" id="delbox" hidden>
+      <span>Excluir esta máquina e todas as diárias marcadas?</span>
+      <button type="button" class="danger" id="delyes">Excluir</button>
+      <button type="button" id="delno">Cancelar</button>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" class="danger" id="del" hidden>Excluir</button>
+      <div><button type="button" id="cancel">Cancelar</button><button type="submit" class="primary" id="save">Salvar</button></div>
+    </div>
+  </form>
+</dialog>
+<datalist id="obras"></datalist>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const SEM=['dom','seg','ter','qua','qui','sex','sáb'];
+const brl=v=>(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const num=v=>v.toLocaleString('pt-BR',{maximumFractionDigits:1});
+const parseMoney=s=>{s=String(s??'').trim();if(!s)return null;s=s.replace(/[R$\s]/g,'');if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');const v=parseFloat(s);return isNaN(v)?null:v};
+const fmtMoney=v=>typeof v==='number'?v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}):'';
+const now=new Date();
+let ym={y:now.getFullYear(),m:now.getMonth()};
+const mesKey=()=>ym.y+'-'+pad(ym.m+1);
+const diasNoMes=()=>new Date(ym.y,ym.m+1,0).getDate();
+
+let db=null, maqs={}, lanc={}, editing=null;
+const LS='diarias-maquinas-v1';
+function toast(t){const e=$('#toast');e.textContent=t;e.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>e.hidden=true,2600)}
+
+/* ---------- armazenamento: banco compartilhado; sem ele, só neste navegador ---------- */
+function saveLocal(){try{localStorage.setItem(LS,JSON.stringify({maqs,lanc}))}catch(e){}}
+function loadLocal(){try{const c=JSON.parse(localStorage.getItem(LS)||'null');if(c){maqs=c.maqs||{};lanc=c.lanc||{}}}catch(e){}}
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+async function putMaq(id,data){
+  if(db){await db.doc('maquinas/'+id).set(data)}else{maqs[id]=data;saveLocal();render()}
+}
+async function patchMaq(id,patch){
+  if(db){await db.doc('maquinas/'+id).update(patch)}else{maqs[id]={...maqs[id],...patch};saveLocal();render()}
+}
+async function delMaq(id){
+  const ks=Object.keys(lanc).filter(k=>lanc[k].maq===id);
+  if(db){await db.doc('maquinas/'+id).delete();await Promise.allSettled(ks.map(k=>db.doc('lancamentos/'+k).delete()))}
+  else{delete maqs[id];ks.forEach(k=>delete lanc[k]);saveLocal();render()}
+}
+// cliques rápidos na mesma linha viram uma só gravação
+const pend={};
+function queueLanc(k){
+  clearTimeout(pend[k]);
+  pend[k]=setTimeout(async()=>{delete pend[k];const d=lanc[k];
+    if(!db){saveLocal();return}
+    try{await db.doc('lancamentos/'+k).set(d)}catch(e){toast('Não foi possível salvar a diária. Tente de novo.')}},450);
+}
+
+/* ---------- cálculo ---------- */
+function periodo(m){ // dias do mês em que a máquina esteve na obra
+  const n=diasNoMes(), ini=new Date(ym.y,ym.m,1), fim=new Date(ym.y,ym.m,n);
+  const a=m.ini?new Date(m.ini+'T00:00'):null, b=m.fim?new Date(m.fim+'T00:00'):null;
+  if(a&&a>fim)return null; if(b&&b<ini)return null;
+  const d0=a&&a>ini?a.getDate():1, d1=b&&b<fim?b.getDate():n;
+  return {d0,d1,dias:d1-d0+1,n};
+}
+function calc(m){
+  const L=lanc[m.id+'_'+mesKey()], dias=L?.dias||{};
+  let di=0,pa=0;for(const v of Object.values(dias)){if(v==='P')pa++;else di+=v}
+  const p=periodo(m)||{dias:0,n:diasNoMes()};
+  let total=0,info='';
+  if(m.tipo==='mensal'){
+    total=m.valor!=null?m.valor*p.dias/p.n:0;
+    info=p.dias===p.n?'mês cheio':p.dias+'/'+p.n+' dias';
+  }else{total=m.valor!=null?m.valor*di:0;info=num(di)+' × '+(m.valor!=null?brl(m.valor):'—')}
+  return {di,pa,total,info,semValor:m.valor==null};
+}
+const visiveis=()=>Object.values(maqs).filter(m=>periodo(m)).sort((a,b)=>(a.obra||'').localeCompare(b.obra||'')||a.nome.localeCompare(b.nome));
+function filtradas(){
+  const q=$('#q').value.trim().toLowerCase(), ob=$('#f_obra').value, tp=$('#f_tipo').value;
+  return visiveis().filter(m=>(!ob||m.obra===ob)&&(!tp||m.tipo===tp)&&(!q||[m.nome,m.ident,m.forn,m.obra].join(' ').toLowerCase().includes(q)));
+}
+
+/* ---------- tela ---------- */
+const CICLO=[undefined,1,0.5,'P'];
+function cell(v){if(v===1)return['s1','1'];if(v===0.5)return['sh','½'];if(v==='P')return['sp','P'];return['','·']}
+function render(){
+  $('#mlabel').textContent=MESES[ym.m]+' '+ym.y;
+  const obras=[...new Set(Object.values(maqs).map(m=>m.obra).filter(Boolean))].sort();
+  const so=$('#f_obra'),cur=so.value;
+  so.innerHTML='<option value="">Todas as obras</option>'+obras.map(o=>`<option${o===cur?' selected':''}>${esc(o)}</option>`).join('');
+  $('#obras').innerHTML=obras.map(o=>`<option value="${esc(o)}">`).join('');
+
+  const list=filtradas(), n=diasNoMes();
+  const hoje=now.getFullYear()===ym.y&&now.getMonth()===ym.m?now.getDate():0;
+  let tdi=0,tpa=0,ttot=0,tsem=0;
+  const rowsC=list.map(m=>{const c=calc(m);tdi+=c.di;tpa+=c.pa;ttot+=c.total;if(c.semValor)tsem++;return c});
+  $('#s_maq').textContent=list.length;$('#s_dia').textContent=num(tdi);$('#s_par').textContent=tpa;
+  $('#s_tot').textContent=brl(ttot);$('#s_sem').textContent=tsem;$('#s_semw').hidden=!tsem;
+
+  if(!Object.keys(maqs).length){
+    $('#grid').innerHTML=`<div class="empty"><b>Nenhuma máquina cadastrada</b><span>Cadastre a primeira máquina com o fornecedor e a obra. O valor pode ficar em branco e ser preenchido depois.</span><button type="button" class="primary" onclick="openDlg()">Nova máquina</button></div>`;return}
+  if(!list.length){$('#grid').innerHTML=`<div class="empty"><b>Nenhuma máquina neste mês</b><span>Nenhuma máquina estava na obra em ${MESES[ym.m].toLowerCase()} ou os filtros esconderam todas.</span></div>`;return}
+
+  let h='<table><thead><tr><th class="sticky mq">Máquina</th><th class="cb">Cobrança</th><th class="vl">Valor (R$)</th>';
+  for(let d=1;d<=n;d++){const w=new Date(ym.y,ym.m,d).getDay();h+=`<th class="day${w===0||w===6?' we':''}${d===hoje?' today':''}">${d}<small>${SEM[w]}</small></th>`}
+  h+='<th class="tt">Diárias</th><th class="tt">Total</th></tr></thead><tbody>';
+  list.forEach((m,i)=>{
+    const c=rowsC[i], p=periodo(m), dias=lanc[m.id+'_'+mesKey()]?.dias||{};
+    const sub=[m.ident,m.forn,m.obra].filter(Boolean).map(esc).join(' · ');
+    h+=`<tr data-id="${esc(m.id)}"><td class="sticky mq"><button type="button" data-edit="${esc(m.id)}"><span class="nm">${esc(m.nome)}</span>${sub?`<span class="sub">${sub}</span>`:''}</button></td>
+      <td class="cb"><select data-tipo="${esc(m.id)}" aria-label="Cobrança de ${esc(m.nome)}"><option value="diaria"${m.tipo!=='mensal'?' selected':''}>Diária</option><option value="mensal"${m.tipo==='mensal'?' selected':''}>Mensal</option></select></td>
+      <td class="vl"><input data-valor="${esc(m.id)}" inputmode="decimal" placeholder="em branco" value="${esc(fmtMoney(m.valor))}" aria-label="Valor de ${esc(m.nome)}"><span class="per">${m.tipo==='mensal'?'por mês':'por diária'}</span></td>`;
+    for(let d=1;d<=n;d++){
+      const w=new Date(ym.y,ym.m,d).getDay(), v=dias[pad(d)], [cls,t]=cell(v), out=d<p.d0||d>p.d1;
+      h+=`<td class="d${w===0||w===6?' we':''}${out?' out':''}"><button type="button" class="${cls}" data-day="${d}" aria-label="Dia ${d}: ${v===1?'diária':v===0.5?'meia diária':v==='P'?'parada':'vazio'}">${t}</button></td>`;
+    }
+    h+=`<td class="tt">${num(c.di)}${c.pa?`<small>${c.pa} parada${c.pa>1?'s':''}</small>`:''}</td><td class="tt">${c.semValor?'<span class="muted">—</span>':brl(c.total)}<small>${esc(c.info)}</small></td></tr>`;
+  });
+  h+=`</tbody><tfoot><tr><td class="sticky mq">Total do mês</td><td colspan="${n+2}"></td><td class="tt">${num(tdi)}</td><td class="tt">${brl(ttot)}</td></tr></tfoot></table>`;
+  const g=$('#grid'),sx=g.scrollLeft,ae=document.activeElement,keep=ae?.dataset?.valor?{id:ae.dataset.valor,v:ae.value}:null;
+  g.innerHTML=h;g.scrollLeft=sx;
+  if(keep){const el=g.querySelector(`[data-valor="${CSS.escape(keep.id)}"]`);if(el){el.value=keep.v;el.focus()}}
+}
+
+/* ---------- interação na grade ---------- */
+$('#grid').addEventListener('click',e=>{
+  const ed=e.target.closest('[data-edit]');if(ed){openDlg(ed.dataset.edit);return}
+  const b=e.target.closest('[data-day]');if(!b)return;
+  const id=b.closest('tr').dataset.id, k=id+'_'+mesKey(), d=pad(b.dataset.day);
+  const L=lanc[k]||(lanc[k]={maq:id,mes:mesKey(),dias:{}});
+  const nx=CICLO[(CICLO.indexOf(L.dias[d])+1)%CICLO.length];
+  if(nx===undefined)delete L.dias[d];else L.dias[d]=nx;
+  render();queueLanc(k);
+  const nb=document.querySelector(`tr[data-id="${CSS.escape(id)}"] [data-day="${b.dataset.day}"]`);nb&&nb.focus();
+});
+$('#grid').addEventListener('change',async e=>{
+  const t=e.target;
+  try{
+    if(t.dataset.tipo){maqs[t.dataset.tipo].tipo=t.value;render();await patchMaq(t.dataset.tipo,{tipo:t.value})}
+    if(t.dataset.valor){const v=parseMoney(t.value);if(t.value.trim()&&v==null){toast('Valor inválido. Use números, ex.: 850,00');render();return}
+      maqs[t.dataset.valor].valor=v;render();await patchMaq(t.dataset.valor,{valor:v});toast(v==null?'Valor apagado':'Valor salvo')}
+  }catch(err){toast('Não foi possível salvar. Tente de novo.')}
+});
+$('#grid').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset.valor)e.target.blur()});
+['#q','#f_obra','#f_tipo'].forEach(s=>$(s).addEventListener('input',render));
+$('#prev').onclick=()=>{ym.m--;if(ym.m<0){ym.m=11;ym.y--}render()};
+$('#next').onclick=()=>{ym.m++;if(ym.m>11){ym.m=0;ym.y++}render()};
+
+/* ---------- cadastro ---------- */
+const F=['nome','ident','forn','obra','tipo','ini','fim','obs'];
+function syncHint(){$('#m_vlab').textContent=$('#m_tipo').value==='mensal'?'Valor mensal (R$)':'Valor da diária (R$)'}
+$('#m_tipo').onchange=syncHint;
+function openDlg(id){
+  editing=id?maqs[id]:null;
+  $('#dlg_t').textContent=editing?'Editar máquina':'Nova máquina';
+  F.forEach(f=>$('#m_'+f).value=editing?.[f]??(f==='tipo'?'diaria':''));
+  if(!editing)$('#m_ini').value=ym.y+'-'+pad(ym.m+1)+'-01';
+  $('#m_valor').value=fmtMoney(editing?.valor);
+  $('#del').hidden=!editing;$('#delbox').hidden=true;syncHint();
+  $('#dlg').showModal();$('#m_nome').focus();
+}
+$('#add').onclick=()=>openDlg();
+$('#cancel').onclick=()=>$('#dlg').close();
+$('#frm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const d={};F.forEach(f=>d[f]=$('#m_'+f).value.trim());
+  const vs=$('#m_valor').value, v=parseMoney(vs);
+  if(vs.trim()&&v==null){toast('Valor inválido. Use números, ex.: 850,00');return}
+  if(d.ini&&d.fim&&d.fim<d.ini){toast('A devolução é antes da chegada. Confira as datas.');return}
+  d.valor=v;
+  const id=editing?.id||uid();d.id=id;d.criado=editing?.criado||new Date().toISOString();
+  $('#save').disabled=true;
+  try{await putMaq(id,d);$('#dlg').close();toast(editing?'Máquina atualizada':'Máquina cadastrada')}
+  catch(err){toast('Não foi possível salvar a máquina. Tente de novo.')}
+  $('#save').disabled=false;
+});
+$('#del').onclick=()=>{$('#delbox').hidden=false};
+$('#delno').onclick=()=>{$('#delbox').hidden=true};
+$('#delyes').onclick=async()=>{try{await delMaq(editing.id);$('#dlg').close();toast('Máquina excluída')}catch(e){toast('Não foi possível excluir.')}};
+
+/* ---------- CSV do mês ---------- */
+$('#csv').onclick=async()=>{
+  const list=filtradas(), n=diasNoMes(), q=s=>'"'+String(s??'').replace(/"/g,'""')+'"';
+  const head=['Máquina','Placa/patrimônio','Fornecedor','Obra','Cobrança','Valor'];for(let d=1;d<=n;d++)head.push(pad(d));head.push('Diárias','Paradas','Total');
+  const lines=[head.map(q).join(';')];
+  list.forEach(m=>{const c=calc(m),dias=lanc[m.id+'_'+mesKey()]?.dias||{};
+    const r=[m.nome,m.ident,m.forn,m.obra,m.tipo==='mensal'?'Mensal':'Diária',fmtMoney(m.valor)];
+    for(let d=1;d<=n;d++){const v=dias[pad(d)];r.push(v===1?'1':v===0.5?'0,5':v==='P'?'P':'')}
+    r.push(String(c.di).replace('.',','),c.pa,c.semValor?'':fmtMoney(c.total));lines.push(r.map(q).join(';'))});
+  const text='﻿'+lines.join('\r\n'), name='diarias-'+mesKey()+'.csv';
+  let dl=null;try{dl=await claude?.use?.('downloads')}catch(e){}
+  if(dl){try{await dl.save({filename:name,data:new Blob([text],{type:'text/csv'})});return}catch(e){if(e?.code==='dismissed'||e?.code==='declined')return}}
+  try{await navigator.clipboard.writeText(text.slice(1));toast('CSV copiado. Cole no Excel.')}catch(e){toast('Não foi possível exportar neste navegador.')}
+};
+
+/* ---------- início ---------- */
+loadLocal();render();
+(async()=>{
+  for(let i=0;i<30&&!window.claude;i++)await new Promise(r=>setTimeout(r,100));
+  try{db=window.claude?await claude.use('db'):null}catch(e){db=null}
+  if(!db){$('#mode').textContent='Sem conexão com o banco compartilhado: os dados ficam salvos só neste navegador.';$('#mode').className='note warn';return}
+  $('#mode').textContent='';
+  const timer=setTimeout(()=>{$('#mode').textContent='O banco está demorando para responder. Mostrando a última cópia deste navegador.';$('#mode').className='note warn'},10000);
+  db.collection('maquinas').onSnapshot(s=>{clearTimeout(timer);$('#mode').textContent='';maqs={};s.docs.forEach(d=>{maqs[d.id]={...d.data(),id:d.id}});saveLocal();render()},()=>toast('Conexão com o banco perdida. Recarregue a página.'));
+  db.collection('lancamentos').onSnapshot(s=>{const nx={};s.docs.forEach(d=>{nx[d.id]=d.data()});for(const k in pend)if(lanc[k])nx[k]=lanc[k];lanc=nx;saveLocal();render()},()=>{});
+})();
+</script>
