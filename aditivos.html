@@ -173,9 +173,6 @@ body.has-bulk .toast{bottom:calc(150px + env(safe-area-inset-bottom,0px))}
 .sync[data-state="slow"]{background:var(--warn-soft);color:var(--warn)}
 @media (prefers-reduced-motion:no-preference){.sync[data-state="busy"]{animation:pulse 1.2s ease-in-out infinite}}
 @keyframes pulse{50%{opacity:.5}}
-.cklist{list-style:none;margin:4px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 16px}
-.cklist .check{color:var(--ink);white-space:normal}
-.cklist input:checked+span{text-decoration:line-through;color:var(--muted)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:.88rem;z-index:20}
 @media (prefers-reduced-motion:no-preference){.card{transition:border-color .2s}}
 /* Importação do Mega */
@@ -279,9 +276,6 @@ details.imp ul{margin:8px 0 0;padding-left:18px;font-size:.85rem;color:var(--mut
         </div>
       </fieldset>
       <section id="histBox" hidden>
-        <div class="field" style="margin-bottom:14px"><span class="label">Lista de verificação (<span id="ckCount">0 de 6</span> itens concluídos)</span>
-          <ul class="cklist" id="cklist"></ul>
-          <span class="note">Marcar um item leva o aditivo para a etapa seguinte a ele; desmarcar volta para a etapa do item.</span></div>
         <div class="grid">
           <div class="field"><span class="label">Linha do tempo</span><ol class="timeline" id="timeline"></ol></div>
           <div class="field"><span class="label">Histórico</span>
@@ -421,26 +415,6 @@ function status(d){
   if(n===sla)return{cls:'warn',chip:'warn',label:lab,n};
   return{cls:'ok',chip:'ok',label:lab,n};
 }
-// Lista de verificação do Planner: item feito quando o aditivo já chegou em "ate"; "em" é a etapa do item
-const CHECK=[
- {n:'Criar RM',em:'rm',ate:'aprov_controle'},
- {n:'Aprovação RM',em:'aprov_controle',ate:'cotacao'},
- {n:'Cotação',em:'cotacao',ate:'aprov_suprimentos'},
- {n:'Aprovação cotação',em:'aprov_suprimentos',ate:'encerrar'},
- {n:'Solicitar subir saldo',em:'saldo',ate:'assinatura'},
- {n:'Aguardar subir saldo',em:'assinatura',ate:'liberado'}];
-const ckIsDone=(d,c)=>IDX[d.etapa]>=IDX[c.ate];
-const ckDone=d=>CHECK.filter(c=>ckIsDone(d,c)).length;
-function renderCk(d){
-  $('#ckCount').textContent=ckDone(d)+' de 6';
-  $('#cklist').innerHTML=CHECK.map((c,i)=>`<li><label class="check"><input type="checkbox" data-ck="${i}" ${ckIsDone(d,c)?'checked':''} ${d.arquivado||busy.has(d.id)?'disabled':''}> <span>${esc(c.n)}</span></label></li>`).join('');
-}
-document.addEventListener('change',e=>{
-  const i=e.target.dataset?.ck;if(i==null||!editing)return;
-  const c=CHECK[+i], d=editing, to=e.target.checked?c.ate:c.em;
-  if(to===d.etapa)return;
-  Promise.resolve(move(d,to,{},(e.target.checked?'Checklist: “'+c.n+'” concluído':'Checklist: “'+c.n+'” desmarcado')+' → '+STAGES[IDX[to]].n)).then(()=>{if(editing)renderCk(editing)});
-});
 function tagsFor(d){
   const t=[];
   if(d.prioridade==='urgente'&&!d.arquivado)t.push('<span class="chip late">Urgente</span>');
@@ -450,7 +424,6 @@ function tagsFor(d){
     else{let n=0;const x=parseD(td),b=parseD(d.prazo);while(x<b){x.setDate(x.getDate()+1);const w=x.getDay();if(w&&w!==6)n++}if(n<=2)cls='warn'}
     t.push(`<span class="chip ${cls}">${esc(lab)}</span>`);
   }
-  if(!d.arquivado){const k=ckDone(d);t.push(`<span class="chip ${k===6?'ok':'neutral'}">Checklist ${k}/6</span>`)}
   return t.length?`<div class="stage-row" style="justify-content:flex-start">${t.join('')}</div>`:'';
 }
 const teveRep=d=>!!d.teveReprova||d.motivoTipo==='reprova';
@@ -650,7 +623,7 @@ function openDlg(d){
     $('#timeline').innerHTML=STAGES.map((s,j)=>{const c=skipped(d,s.k)?'skip':(j<i||d.etapa==='liberado')?'done':j===i?'cur':'';
       const rw=c!=='skip'&&(c==='done'||c==='cur')?respOf(d,s.k):'';
       return`<li class="${c}"><span class="dot"></span><span>${esc(s.n)}${rw?`<span class="who">${esc(rw)}</span>`:''}</span><span class="mono muted">${c==='skip'?'não se aplica':fmtD(d.entradas?.[s.k])}</span></li>`}).join('');
-    renderLog(d);renderCk(d);
+    renderLog(d);
   }
   respOptions();syncFields();
   $('#dlg').showModal();
@@ -1131,7 +1104,7 @@ render();
     else if(!rows.length)return;
     loaded=true;
     [...sel].forEach(id=>{if(!rows.some(r=>r.id===id))sel.delete(id)});
-    if(editing){const fresh=rows.find(r=>r.id===editing.id);if(fresh){editing=fresh;if($('#dlg').open){renderLog(fresh);renderCk(fresh);dlgBlk=[...blk(fresh)];renderBlk()}}}
+    if(editing){const fresh=rows.find(r=>r.id===editing.id);if(fresh){editing=fresh;if($('#dlg').open){renderLog(fresh);dlgBlk=[...blk(fresh)];renderBlk()}}}
     render();
   },e=>{clearTimeout(timer);loaded=true;setSync('slow','Conexão perdida: recarregue a página');render()});
 })();
