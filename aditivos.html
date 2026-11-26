@@ -443,6 +443,7 @@ function actions(d){
   }
   if(k==='correcao_rm')return[{id:'adv',label:'RM corrigida e reenviada → Reaprovação',primary:1}];
   if(k==='aprov_controle'||k==='reaprovacao')return[{id:'ctrl_ok',label:'Aprovado sem estouro →',primary:1},{id:'ctrl_estouro',label:'Aprovado com estouro →'},{id:'ctrl_rep',label:'Reprovado…'}];
+  if(k==='aprov_suprimentos')return[{id:'adv',label:'Cotação aprovada → Encerrar cotação',primary:1},{id:'sup_dev',label:'Devolvido RM…'}];
   if(k==='liberado')return[{id:'arquivar',label:'Arquivar'}];
   const nk=nextKey(d);
   return[{id:'adv',label:'Concluir → '+STAGES[IDX[nk]].n,primary:1}];
@@ -454,6 +455,7 @@ const resolveRep=(d,to)=>repAberta(d)&&IDX[to]>IDX.reaprovacao?{reprovaResolvida
 function nextText(d){
   if(d.arquivado)return isCancel(d)?'Cancelado.':'Arquivado.';
   if(d.etapa==='rm'&&repAberta(d))return'RM reprovada pelo Controle: corrigir e subir a RM de novo no Mega.';
+  if(d.etapa==='correcao_rm'&&d.motivoOrigem==='suprimentos')return'RM devolvida por Suprimentos na aprovação da cotação: corrigir a RM no Mega e reenviar'+((d.reprovas||0)>1?' ('+d.reprovas+'ª devolução/reprova).':'.');
   if(d.etapa==='correcao_rm'&&(d.reprovas||0)>1)return'RM reprovada de novo ('+d.reprovas+'ª reprova): corrigir e reenviar no Mega.';
   if(d.etapa==='criar_insumo')return'Aguardando o Orçamento criar o insumo no cadastro'+(d.orcPedido?' (pedido em '+fmtD(d.orcPedido)+').':'.');
   if(d.etapa==='insumo'&&d.insumoExiste==='nao'&&!d.alocacaoOk&&!d.alocacaoSolicitada)return'Insumo não existe na etapa: pedir ao Controle, por e-mail, que aloque o insumo na etapa do serviço.';
@@ -501,9 +503,13 @@ function askMotivo(title,sub,okLabel,cur){
 }
 $('#motFrm').addEventListener('submit',e=>{e.preventDefault();const m=$('#motIn').value.trim();if(!m)return;const r=motResolve;motResolve=null;$('#mot').close();r&&r(m)});
 $('#mot').addEventListener('close',()=>{if(motResolve){motResolve(null);motResolve=null}});
+async function devolver(d){
+  const m=await askMotivo('RM devolvida por Suprimentos',(d.titulo||'')+(d.cotacao?' · cotação '+d.cotacao:''),'Registrar devolução');if(!m)return;
+  return move(d,'correcao_rm',{motivoTipo:'reprova',motivoOrigem:'suprimentos',motivo:m,motivoData:today(),reprovaResolvida:false,teveReprova:true,reprovas:(d.reprovas||0)+1},'RM devolvida por Suprimentos na aprovação da cotação: '+m+' → Correção da RM');
+}
 async function reprovar(d){
   const m=await askMotivo('Reprovado pelo Controle',d.titulo||'','Registrar reprova');if(!m)return;
-  return move(d,'correcao_rm',{motivoTipo:'reprova',motivo:m,motivoData:today(),reprovaResolvida:false,teveReprova:true,reprovas:(d.reprovas||0)+1},(d.etapa==='reaprovacao'?'Reprovado de novo pelo Controle: ':'Reprovado pelo Controle: ')+m+' → Correção da RM');
+  return move(d,'correcao_rm',{motivoTipo:'reprova',motivoOrigem:'controle',motivo:m,motivoData:today(),reprovaResolvida:false,teveReprova:true,reprovas:(d.reprovas||0)+1},(d.etapa==='reaprovacao'?'Reprovado de novo pelo Controle: ':'Reprovado pelo Controle: ')+m+' → Correção da RM');
 }
 async function cancelar(d){
   const m=await askMotivo('Cancelar aditivo',d.titulo||'','Cancelar aditivo');if(!m)return;
@@ -524,6 +530,7 @@ function doAction(id,d){
     case'arquivar':return write(d.id,{arquivado:true,log:logPlus(d,'Arquivado')});
     case'desarquivar':return write(d.id,{arquivado:false,...(isCancel(d)?{motivoTipo:null}:{}),log:logPlus(d,'Reativado')});
     case'ctrl_rep':return reprovar(d);
+    case'sup_dev':return devolver(d);
   }
 }
 
@@ -596,7 +603,7 @@ function render(){
       ${d.insumoCriado&&IDX[d.etapa]>=IDX.insumo&&IDX[d.etapa]<=IDX.rm?`<p class="note" style="margin:0">Insumo criado pelo Orçamento em ${fmtD(d.insumoCriado)}${d.orcPedido?' (pedido em '+fmtD(d.orcPedido)+')':''}.</p>`:''}
       <p class="next">${esc(nextText(d))}</p>
       ${d.estouro==='sim'&&i<=IDX.aprov_gestao?'<p class="sub">Com estouro de insumo: precisa de coord. + gerente.</p>':''}
-      ${repAberta(d)&&!d.arquivado?`<p class="sub bad">Reprovado pelo Controle em ${fmtD(d.motivoData)}: ${esc(d.motivo||'sem motivo informado')}</p>`:''}
+      ${repAberta(d)&&!d.arquivado?`<p class="sub bad">${d.motivoOrigem==='suprimentos'?'RM devolvida por Suprimentos':'Reprovado pelo Controle'} em ${fmtD(d.motivoData)}: ${esc(d.motivo||'sem motivo informado')}</p>`:''}
       ${d.arquivado&&isCancel(d)?`<p class="sub bad">Motivo do cancelamento: ${esc(d.motivo||'não informado')}</p>`:''}
       <div class="card-actions"${selMode?' hidden':''}>${acts}<span class="spacer"></span>${ids?`<span class="mono muted" style="font-size:.78rem">${ids}</span>`:''}<button type="button" class="ghost" data-open="${esc(d.id)}">Detalhes</button></div>
     </article>`}).join('');
@@ -614,7 +621,7 @@ function openDlg(d){
   v('#f_etapa',d?.etapa||'necessidade');v('#f_entrada',d?(d.entradas?.[d.etapa]||''):today());
   v('#f_neg',d?.negociar==='sim'?'sim':'');v('#f_resp',d?respOf(d,d.etapa):(cfg.resp?.necessidade||''));v('#f_cad',d?.insumoCadastro);v('#f_orcPed',d?.orcPedido);v('#f_orcOk',d?.insumoCriado);v('#f_insumo',d?.insumoExiste);v('#f_alocPed',d?.alocacaoSolicitada);v('#f_alocOk',d?.alocacaoOk);v('#f_estouro',d?.estouro);
   v('#f_rm',d?.rm);v('#f_cot',d?.cotacao);v('#f_notas',d?.notas);v('#f_motivo',d?.motivo);v('#f_prazo',d?.prazo);v('#f_prio',d?.prioridade);
-  $('#f_motivoLbl').textContent=d?.motivoTipo==='reprova'?'Motivo da reprova do Controle'+(d.motivoData?' ('+fmtD(d.motivoData)+')':''):d?.motivoTipo==='cancelamento'?'Motivo do cancelamento'+(d.motivoData?' ('+fmtD(d.motivoData)+')':''):'Motivo (reprova do Controle / cancelamento)';
+  $('#f_motivoLbl').textContent=d?.motivoTipo==='reprova'?(d.motivoOrigem==='suprimentos'?'Motivo da devolução da RM (Suprimentos)':'Motivo da reprova do Controle')+(d.motivoData?' ('+fmtD(d.motivoData)+')':''):d?.motivoTipo==='cancelamento'?'Motivo do cancelamento'+(d.motivoData?' ('+fmtD(d.motivoData)+')':''):'Motivo (reprova do Controle / cancelamento)';
   $('#histBox').hidden=!d;$('#btnDel').hidden=!d;$('#btnArch').hidden=!d;$('#btnCancel').hidden=!d||!!d.arquivado;
   resetDel();
   if(d){
