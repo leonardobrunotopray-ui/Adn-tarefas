@@ -26,6 +26,7 @@
   --wk:#121920; color-scheme:dark}
 
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45}
 .wrap{max-width:1400px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:16px}
 h1,h2{font-family:var(--f-head);font-weight:600;text-wrap:balance;margin:0}
@@ -62,6 +63,8 @@ header.top p{margin:4px 0 0;color:var(--muted);max-width:62ch}
 .filters select{width:auto;max-width:100%}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.8rem;color:var(--muted);align-items:center}
 .legend span{display:inline-flex;gap:6px;align-items:center}
+.legend button{display:inline-flex;gap:6px;align-items:center;padding:4px 10px 4px 4px;font-size:.82rem;color:var(--ink)}
+.legend button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
 .legend i{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:4px;font-style:normal;font-family:var(--f-mono);font-size:.75rem;border:1px solid var(--line)}
 
 /* Grade */
@@ -93,7 +96,7 @@ td.d button:hover{border-color:var(--accent)}
 td.d button.s1{background:var(--ok-soft);color:var(--ok);border-color:var(--ok);font-weight:600}
 td.d button.sh{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
 td.d button.sp{background:var(--bad-soft);color:var(--bad);border-color:var(--bad)}
-td.d.out button{opacity:.35}
+td.d.out{background-image:repeating-linear-gradient(135deg,transparent 0 4px,var(--wk) 4px 6px)}
 td.tt,th.tt{padding:6px 10px;border-left:1px solid var(--line);text-align:right;font-family:var(--f-mono)}
 td.tt small{display:block;color:var(--muted);font-size:.68rem;font-family:var(--f-body)}
 tfoot td{background:var(--surface-2);font-weight:600;padding:8px 10px}
@@ -147,12 +150,14 @@ dialog form{display:grid;gap:14px;padding:18px}
     <select id="f_obra" aria-label="Obra"><option value="">Todas as obras</option></select>
     <select id="f_tipo" aria-label="Cobrança"><option value="">Diária e mensal</option><option value="diaria">Só diária</option><option value="mensal">Só mensal</option></select>
   </div>
-  <div class="legend" aria-label="Legenda">
-    <span>Clique no dia para alternar:</span>
-    <span><i class="mono">·</i>vazio</span>
-    <span><i class="mono" style="background:var(--ok-soft);color:var(--ok);border-color:var(--ok)">1</i>diária</span>
-    <span><i class="mono" style="background:var(--accent-soft);color:var(--accent);border-color:var(--accent)">½</i>meia diária</span>
-    <span><i class="mono" style="background:var(--bad-soft);color:var(--bad);border-color:var(--bad)">P</i>parada (não cobra)</span>
+  <div class="legend" role="toolbar" aria-label="Marcador">
+    <span>Marcar dias como:</span>
+    <button type="button" data-pen="1" aria-pressed="true"><i style="background:var(--ok-soft);color:var(--ok);border-color:var(--ok)">1</i>Diária</button>
+    <button type="button" data-pen="0.5" aria-pressed="false"><i style="background:var(--accent-soft);color:var(--accent);border-color:var(--accent)">½</i>Meia diária</button>
+    <button type="button" data-pen="P" aria-pressed="false"><i style="background:var(--bad-soft);color:var(--bad);border-color:var(--bad)">P</i>Parada (não cobra)</button>
+    <button type="button" data-pen="0" aria-pressed="false"><i>·</i>Apagar</button>
+    <span>Clique no dia para marcar. Clique de novo para desmarcar.</span>
+    <span id="sync" aria-live="polite"></span>
   </div>
 
   <div class="grid" id="grid"></div>
@@ -204,7 +209,7 @@ let ym={y:now.getFullYear(),m:now.getMonth()};
 const mesKey=()=>ym.y+'-'+pad(ym.m+1);
 const diasNoMes=()=>new Date(ym.y,ym.m+1,0).getDate();
 
-let db=null, maqs={}, lanc={}, editing=null;
+let db=null, maqs={}, lanc={}, ov={}, editing=null, pen=1;
 const LS='diarias-maquinas-v1';
 function toast(t){const e=$('#toast');e.textContent=t;e.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>e.hidden=true,2600)}
 
@@ -223,13 +228,29 @@ async function delMaq(id){
   if(db){await db.doc('maquinas/'+id).delete();await Promise.allSettled(ks.map(k=>db.doc('lancamentos/'+k).delete()))}
   else{delete maqs[id];ks.forEach(k=>delete lanc[k]);saveLocal();render()}
 }
-// cliques rápidos na mesma linha viram uma só gravação
-const pend={};
-function queueLanc(k){
-  clearTimeout(pend[k]);
-  pend[k]=setTimeout(async()=>{delete pend[k];const d=lanc[k];
-    if(!db){saveLocal();return}
-    try{await db.doc('lancamentos/'+k).set(d)}catch(e){toast('Não foi possível salvar a diária. Tente de novo.')}},450);
+// Cada clique vira uma alteração pendente (ov) por dia; as pendentes de uma linha são gravadas juntas,
+// uma gravação por vez, mesclando só os dias alterados. A tela usa o valor pendente até o banco confirmar.
+const timers={}, busyK={};
+function dias(k){const base=lanc[k]?.dias||{}, o=ov[k]||{}, r={};for(const d in base)if(base[d])r[d]=base[d];for(const d in o){if(o[d])r[d]=o[d];else delete r[d]}return r}
+function syncMsg(t,warn){const e=$('#sync');e.textContent=t;e.style.color=warn?'var(--bad)':''}
+function queueLanc(k){clearTimeout(timers[k]);timers[k]=setTimeout(()=>flush(k),350);syncMsg('Salvando…')}
+async function flush(k){
+  delete timers[k];
+  if(busyK[k]){timers[k]=setTimeout(()=>flush(k),200);return}
+  const o=ov[k];if(!o||!Object.keys(o).length)return;
+  const sent={...o};
+  if(!db){const L=lanc[k]||(lanc[k]={maq:k.split('_')[0],mes:k.split('_')[1],dias:{}});
+    for(const d in sent){if(sent[d])L.dias[d]=sent[d];else delete L.dias[d]}delete ov[k];saveLocal();syncMsg('Salvo neste navegador');return}
+  busyK[k]=true;
+  try{
+    const [maq,mes]=[k.slice(0,k.lastIndexOf('_')),k.slice(k.lastIndexOf('_')+1)];
+    if(lanc[k])await db.doc('lancamentos/'+k).update({dias:sent});
+    else await db.doc('lancamentos/'+k).set({maq,mes,dias:sent});
+    const L=lanc[k]||(lanc[k]={maq,mes,dias:{}});
+    for(const d in sent){L.dias[d]=sent[d];if(ov[k]&&ov[k][d]===sent[d])delete ov[k][d]}
+    syncMsg(Object.keys(ov[k]||{}).length?'Salvando…':'Salvo');
+  }catch(e){syncMsg('Não foi possível salvar. Confira a conexão e clique de novo.',true)}
+  busyK[k]=false;
 }
 
 /* ---------- cálculo ---------- */
@@ -241,8 +262,8 @@ function periodo(m){ // dias do mês em que a máquina esteve na obra
   return {d0,d1,dias:d1-d0+1,n};
 }
 function calc(m){
-  const L=lanc[m.id+'_'+mesKey()], dias=L?.dias||{};
-  let di=0,pa=0;for(const v of Object.values(dias)){if(v==='P')pa++;else di+=v}
+  const dd=dias(m.id+'_'+mesKey());
+  let di=0,pa=0;for(const v of Object.values(dd)){if(v==='P')pa++;else di+=v}
   const p=periodo(m)||{dias:0,n:diasNoMes()};
   let total=0,info='';
   if(m.tipo==='mensal'){
@@ -258,7 +279,6 @@ function filtradas(){
 }
 
 /* ---------- tela ---------- */
-const CICLO=[undefined,1,0.5,'P'];
 function cell(v){if(v===1)return['s1','1'];if(v===0.5)return['sh','½'];if(v==='P')return['sp','P'];return['','·']}
 function render(){
   $('#mlabel').textContent=MESES[ym.m]+' '+ym.y;
@@ -282,13 +302,13 @@ function render(){
   for(let d=1;d<=n;d++){const w=new Date(ym.y,ym.m,d).getDay();h+=`<th class="day${w===0||w===6?' we':''}${d===hoje?' today':''}">${d}<small>${SEM[w]}</small></th>`}
   h+='<th class="tt">Diárias</th><th class="tt">Total</th></tr></thead><tbody>';
   list.forEach((m,i)=>{
-    const c=rowsC[i], p=periodo(m), dias=lanc[m.id+'_'+mesKey()]?.dias||{};
+    const c=rowsC[i], p=periodo(m), dd=dias(m.id+'_'+mesKey());
     const sub=[m.ident,m.forn,m.obra].filter(Boolean).map(esc).join(' · ');
     h+=`<tr data-id="${esc(m.id)}"><td class="sticky mq"><button type="button" data-edit="${esc(m.id)}"><span class="nm">${esc(m.nome)}</span>${sub?`<span class="sub">${sub}</span>`:''}</button></td>
       <td class="cb"><select data-tipo="${esc(m.id)}" aria-label="Cobrança de ${esc(m.nome)}"><option value="diaria"${m.tipo!=='mensal'?' selected':''}>Diária</option><option value="mensal"${m.tipo==='mensal'?' selected':''}>Mensal</option></select></td>
       <td class="vl"><input data-valor="${esc(m.id)}" inputmode="decimal" placeholder="em branco" value="${esc(fmtMoney(m.valor))}" aria-label="Valor de ${esc(m.nome)}"><span class="per">${m.tipo==='mensal'?'por mês':'por diária'}</span></td>`;
     for(let d=1;d<=n;d++){
-      const w=new Date(ym.y,ym.m,d).getDay(), v=dias[pad(d)], [cls,t]=cell(v), out=d<p.d0||d>p.d1;
+      const w=new Date(ym.y,ym.m,d).getDay(), v=dd[pad(d)], [cls,t]=cell(v), out=d<p.d0||d>p.d1;
       h+=`<td class="d${w===0||w===6?' we':''}${out?' out':''}"><button type="button" class="${cls}" data-day="${d}" aria-label="Dia ${d}: ${v===1?'diária':v===0.5?'meia diária':v==='P'?'parada':'vazio'}">${t}</button></td>`;
     }
     h+=`<td class="tt">${num(c.di)}${c.pa?`<small>${c.pa} parada${c.pa>1?'s':''}</small>`:''}</td><td class="tt">${c.semValor?'<span class="muted">—</span>':brl(c.total)}<small>${esc(c.info)}</small></td></tr>`;
@@ -304,9 +324,8 @@ $('#grid').addEventListener('click',e=>{
   const ed=e.target.closest('[data-edit]');if(ed){openDlg(ed.dataset.edit);return}
   const b=e.target.closest('[data-day]');if(!b)return;
   const id=b.closest('tr').dataset.id, k=id+'_'+mesKey(), d=pad(b.dataset.day);
-  const L=lanc[k]||(lanc[k]={maq:id,mes:mesKey(),dias:{}});
-  const nx=CICLO[(CICLO.indexOf(L.dias[d])+1)%CICLO.length];
-  if(nx===undefined)delete L.dias[d];else L.dias[d]=nx;
+  const cur=dias(k)[d]||0, nx=cur===pen?0:pen;
+  (ov[k]||(ov[k]={}))[d]=nx;
   render();queueLanc(k);
   const nb=document.querySelector(`tr[data-id="${CSS.escape(id)}"] [data-day="${b.dataset.day}"]`);nb&&nb.focus();
 });
@@ -319,6 +338,8 @@ $('#grid').addEventListener('change',async e=>{
   }catch(err){toast('Não foi possível salvar. Tente de novo.')}
 });
 $('#grid').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset.valor)e.target.blur()});
+document.querySelectorAll('[data-pen]').forEach(b=>b.onclick=()=>{const v=b.dataset.pen;pen=v==='P'?'P':Number(v);
+  document.querySelectorAll('[data-pen]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)))});
 ['#q','#f_obra','#f_tipo'].forEach(s=>$(s).addEventListener('input',render));
 $('#prev').onclick=()=>{ym.m--;if(ym.m<0){ym.m=11;ym.y--}render()};
 $('#next').onclick=()=>{ym.m++;if(ym.m>11){ym.m=0;ym.y++}render()};
@@ -360,9 +381,9 @@ $('#csv').onclick=async()=>{
   const list=filtradas(), n=diasNoMes(), q=s=>'"'+String(s??'').replace(/"/g,'""')+'"';
   const head=['Máquina','Placa/patrimônio','Fornecedor','Obra','Cobrança','Valor'];for(let d=1;d<=n;d++)head.push(pad(d));head.push('Diárias','Paradas','Total');
   const lines=[head.map(q).join(';')];
-  list.forEach(m=>{const c=calc(m),dias=lanc[m.id+'_'+mesKey()]?.dias||{};
+  list.forEach(m=>{const c=calc(m),dd=dias(m.id+'_'+mesKey());
     const r=[m.nome,m.ident,m.forn,m.obra,m.tipo==='mensal'?'Mensal':'Diária',fmtMoney(m.valor)];
-    for(let d=1;d<=n;d++){const v=dias[pad(d)];r.push(v===1?'1':v===0.5?'0,5':v==='P'?'P':'')}
+    for(let d=1;d<=n;d++){const v=dd[pad(d)];r.push(v===1?'1':v===0.5?'0,5':v==='P'?'P':'')}
     r.push(String(c.di).replace('.',','),c.pa,c.semValor?'':fmtMoney(c.total));lines.push(r.map(q).join(';'))});
   const text='﻿'+lines.join('\r\n'), name='diarias-'+mesKey()+'.csv';
   let dl=null;try{dl=await claude?.use?.('downloads')}catch(e){}
@@ -379,6 +400,7 @@ loadLocal();render();
   $('#mode').textContent='';
   const timer=setTimeout(()=>{$('#mode').textContent='O banco está demorando para responder. Mostrando a última cópia deste navegador.';$('#mode').className='note warn'},10000);
   db.collection('maquinas').onSnapshot(s=>{clearTimeout(timer);$('#mode').textContent='';maqs={};s.docs.forEach(d=>{maqs[d.id]={...d.data(),id:d.id}});saveLocal();render()},()=>toast('Conexão com o banco perdida. Recarregue a página.'));
-  db.collection('lancamentos').onSnapshot(s=>{const nx={};s.docs.forEach(d=>{nx[d.id]=d.data()});for(const k in pend)if(lanc[k])nx[k]=lanc[k];lanc=nx;saveLocal();render()},()=>{});
+  db.collection('lancamentos').onSnapshot(s=>{const nx={};s.docs.forEach(d=>{nx[d.id]=d.data()});lanc=nx;
+    for(const k in ov)for(const d in ov[k])if(!busyK[k]&&!timers[k]&&((lanc[k]?.dias||{})[d]||0)===ov[k][d])delete ov[k][d];saveLocal();render()},()=>{});
 })();
 </script>
