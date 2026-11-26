@@ -340,6 +340,18 @@ details.imp ul{margin:8px 0 0;padding-left:18px;font-size:.85rem;color:var(--mut
   </form>
 </dialog>
 
+<dialog id="num">
+  <form class="dlg" id="numFrm" method="dialog">
+    <div class="dlg-head"><h2 id="numTitle">Informe o número</h2><button type="button" class="ghost" data-close>Fechar</button></div>
+    <div class="dlg-body">
+      <p class="muted" id="numSub" style="margin:0"></p>
+      <label class="field"><span class="label" id="numLbl">Número</span><input id="numIn" class="mono" inputmode="numeric" autocomplete="off" required></label>
+      <p class="note" id="numErr" style="margin:0" hidden></p>
+    </div>
+    <div class="dlg-foot"><span class="spacer"></span><button type="button" data-close>Voltar</button><button type="submit" class="primary" id="numOk">Confirmar</button></div>
+  </form>
+</dialog>
+
 <dialog id="mot">
   <form class="dlg" id="motFrm" method="dialog">
     <div class="dlg-head"><h2 id="motTitle">Motivo</h2><button type="button" class="ghost" data-close>Fechar</button></div>
@@ -427,7 +439,7 @@ document.addEventListener('change',e=>{
   const i=e.target.dataset?.ck;if(i==null||!editing)return;
   const c=CHECK[+i], d=editing, to=e.target.checked?c.ate:c.em;
   if(to===d.etapa)return;
-  move(d,to,{},(e.target.checked?'Checklist: “'+c.n+'” concluído':'Checklist: “'+c.n+'” desmarcado')+' → '+STAGES[IDX[to]].n);
+  Promise.resolve(move(d,to,{},(e.target.checked?'Checklist: “'+c.n+'” concluído':'Checklist: “'+c.n+'” desmarcado')+' → '+STAGES[IDX[to]].n)).then(()=>{if(editing)renderCk(editing)});
 });
 function tagsFor(d){
   const t=[];
@@ -484,8 +496,27 @@ async function write(id,patch){
   finally{busy.delete(id);render()}
 }
 function logPlus(d,msg){return[...(d.log||[]),{t:today(),msg}]}
-function move(d,to,extra={},msg){
+// Números obrigatórios: sair de "Subir RM" exige o nº da RM; sair de "Cotação" exige o nº da cotação
+const NUM_REQ=[{k:'rm',etapa:'rm',n:'nº da RM',t:'Nº da RM'},{k:'cotacao',etapa:'cotacao',n:'nº da cotação',t:'Nº da cotação'}];
+function faltaNum(d,to,from){from=from??d.etapa;return NUM_REQ.filter(r=>IDX[from]<=IDX[r.etapa]&&IDX[to]>IDX[r.etapa]&&!String(d[r.k]||'').trim())}
+let numResolve=null;
+function askNum(r,d){
+  $('#numTitle').textContent='Informe o '+r.n;$('#numSub').textContent=(d.titulo||'')+(d.empreiteiro?' · '+d.empreiteiro:'')+' — sem o '+r.n+' o aditivo não sai de “'+STAGES[IDX[r.etapa]].n+'”.';
+  $('#numLbl').textContent=r.t+' (Mega)';$('#numIn').value='';$('#numErr').hidden=true;$('#numOk').textContent='Confirmar e avançar';
+  $('#num').showModal();$('#numIn').focus();
+  return new Promise(res=>{numResolve=res});
+}
+$('#numFrm').addEventListener('submit',e=>{e.preventDefault();const v=$('#numIn').value.replace(/\s+/g,'');
+  if(!/^\d{3,}$/.test(v)){$('#numErr').textContent='Digite só os números (pelo menos 3 dígitos).';$('#numErr').hidden=false;return}
+  const r=numResolve;numResolve=null;$('#num').close();r&&r(v)});
+$('#num').addEventListener('close',()=>{if(numResolve){numResolve(null);numResolve=null}});
+async function move(d,to,extra={},msg){
   const p={...resolveRep(d,to),...extra,etapa:to,entradas:{[to]:today()},log:logPlus(d,msg||('Etapa: '+STAGES[IDX[to]].n))};
+  for(const r of faltaNum({...d,...extra},to)){
+    const v=await askNum(r,d);
+    if(!v){toast('Etapa não avançou: falta o '+r.n+'.');return}
+    p[r.k]=v;p.log=[...p.log.slice(0,-1),{t:today(),msg:r.t+' '+v+' informado'},p.log[p.log.length-1]];
+  }
   if(!(d.resp&&d.resp[to])&&cfg.resp&&cfg.resp[to])p.resp={[to]:cfg.resp[to]};
   return write(d.id,p);
 }
@@ -663,6 +694,8 @@ $('#frm').addEventListener('submit',async e=>{
   const base={resp:{[etapa]:g('#f_resp')||null},entraves:[...dlgBlk],titulo:g('#f_titulo'),obra:g('#f_obra'),empreiteiro:g('#f_empreiteiro'),contrato:g('#f_contrato'),valor:parseMoney(g('#f_valor')),
     etapa,negociar:g('#f_neg')||null,insumoCadastro:g('#f_cad')||null,orcPedido:hidOrc?null:g('#f_orcPed')||null,insumoCriado:hidOrc?null:g('#f_orcOk')||null,insumoExiste:g('#f_insumo')||null,alocacaoSolicitada:hidAloc?null:g('#f_alocPed')||null,alocacaoOk:hidAloc?null:g('#f_alocOk')||null,estouro:g('#f_estouro')||null,
     rm:g('#f_rm'),cotacao:g('#f_cot'),notas:$('#f_notas').value,motivo:$('#f_motivo').value.trim(),prazo:g('#f_prazo')||null,prioridade:g('#f_prio')||null,atualizado:new Date().toISOString()};
+  {const falta=faltaNum({rm:base.rm,cotacao:base.cotacao},etapa,editing?editing.etapa:'necessidade');
+   if(falta.length){toast('Para colocar em “'+STAGES[IDX[etapa]].n+'” preencha o '+falta.map(r=>r.n).join(' e o ')+'.');$(falta[0].k==='rm'?'#f_rm':'#f_cot').focus();return}}
   const btn=$('#btnSave');btn.disabled=true;
   try{
     if(!editing){
@@ -793,16 +826,17 @@ async function bulk(list,fn,okMsg){
   render();return fail;
 }
 $('#bAdv').onclick=async()=>{
-  const all=selRows(), can=all.filter(d=>!d.arquivado&&actions(d)[0].id==='adv'), skip=all.length-can.length;
-  if(!can.length){toast('Nenhum dos selecionados pode avançar direto: precisam de decisão (insumo / Controle) ou já estão no fim.');return}
+  const all=selRows(), can0=all.filter(d=>!d.arquivado&&actions(d)[0].id==='adv'), can=can0.filter(d=>!faltaNum(d,nextKey(d)).length), semNum=can0.length-can.length, skip=all.length-can0.length;
+  if(!can.length){toast(semNum?'Os selecionados precisam do nº da RM ou da cotação: conclua pelo cartão para informar.':'Nenhum dos selecionados pode avançar direto: precisam de decisão (insumo / Controle) ou já estão no fim.');return}
   await bulk(can,d=>{const to=nextKey(d);return upd(d,{...resolveRep(d,to),etapa:to,entradas:{[to]:today()},log:logPlus(d,'Etapa: '+STAGES[IDX[to]].n+' (em lote)')})},
-    can.length+' avançados'+(skip?`; ${skip} ficaram (precisam de decisão no cartão)`:''));
+    can.length+' avançados'+(skip?`; ${skip} precisam de decisão no cartão`:'')+(semNum?`; ${semNum} sem nº da RM/cotação (conclua pelo cartão)`:''));
 };
 $('#bMove').onchange=async e=>{
   const to=e.target.value;e.target.value='';if(!to)return;
-  const list=selRows().filter(d=>d.etapa!==to);
-  if(!list.length){toast('Todos já estão nessa etapa.');return}
-  await bulk(list,d=>upd(d,{...resolveRep(d,to),etapa:to,entradas:{[to]:today()},log:logPlus(d,'Movido para '+STAGES[IDX[to]].n+' (em lote)')}),list.length+' movidos para '+STAGES[IDX[to]].n);
+  const list0=selRows().filter(d=>d.etapa!==to), list=list0.filter(d=>!faltaNum(d,to).length), semNum=list0.length-list.length;
+  if(!list0.length){toast('Todos já estão nessa etapa.');return}
+  if(!list.length){toast('Nenhum foi movido: falta o nº da RM ou da cotação. Avance pelo cartão para informar.');return}
+  await bulk(list,d=>upd(d,{...resolveRep(d,to),etapa:to,entradas:{[to]:today()},log:logPlus(d,'Movido para '+STAGES[IDX[to]].n+' (em lote)')}),list.length+' movidos para '+STAGES[IDX[to]].n+(semNum?`; ${semNum} ficaram sem o nº da RM/cotação`:''));
 };
 $('#bArch').onclick=()=>{const l=selRows().filter(d=>!d.arquivado);bulk(l,d=>upd(d,{arquivado:true,log:logPlus(d,'Arquivado (em lote)')}),l.length+' arquivados')};
 $('#bUnarch').onclick=()=>{const l=selRows().filter(d=>d.arquivado);bulk(l,d=>upd(d,{arquivado:false,log:logPlus(d,'Reativado (em lote)')}),l.length+' reativados')};
