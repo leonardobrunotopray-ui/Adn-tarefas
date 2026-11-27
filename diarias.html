@@ -78,8 +78,16 @@ thead th.we,td.we{background:var(--wk)}
 thead th.today{color:var(--accent);box-shadow:inset 0 -3px 0 var(--accent)}
 .sticky{position:sticky;left:0;z-index:1;text-align:left}
 thead .sticky{z-index:3}
-th.mq,td.mq{min-width:200px;max-width:240px;padding:8px 10px;border-right:1px solid var(--line)}
-td.mq button{all:unset;cursor:pointer;display:grid;gap:1px;max-width:220px}
+th.mq,td.mq{min-width:250px;max-width:290px;padding:8px 10px;border-right:1px solid var(--line)}
+td.mq .row{display:flex;gap:6px;align-items:center;justify-content:space-between}
+td.mq button[data-edit]{all:unset;cursor:pointer;display:grid;gap:1px;min-width:0;flex:1}
+td.mq .ctl{display:flex;gap:2px;flex:none}
+td.mq .ctl button{width:24px;height:24px;padding:0;display:grid;place-items:center;border-color:transparent;background:transparent;color:var(--muted);font-size:.7rem}
+td.mq .ctl button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+td.mq .ctl button:disabled{opacity:.3;cursor:default}
+td.mq .ctl button[data-pin][aria-pressed="true"]{color:var(--accent);background:var(--accent-soft)}
+td.mq .ctl svg{width:13px;height:13px;fill:currentColor}
+tr.pinned td.mq{box-shadow:inset 3px 0 0 var(--accent)}
 td.mq button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 td.mq .nm{font-weight:600;white-space:normal;line-height:1.25}
 td.mq .sub{font-size:.75rem;color:var(--muted);white-space:normal}
@@ -179,7 +187,7 @@ dialog form{display:grid;gap:14px;padding:18px}
       <label class="field"><span class="label">Devolução</span><input type="date" id="m_fim"></label>
       <label class="field full"><span class="label">Observações</span><textarea id="m_obs" placeholder="Operador incluso, combustível, franquia de horas…"></textarea></label>
     </div>
-    <p class="note" id="m_hint">Por diária: total = diárias marcadas × valor. Mensal: valor do mês proporcional aos dias em que a máquina esteve na obra.</p>
+    <p class="note" id="m_hint">Por diária: total = diárias marcadas × valor. Mensal: o valor vale 22 diárias, então cada diária marcada = valor ÷ 22.</p>
     <div class="confirm" id="delbox" hidden>
       <span>Excluir esta máquina e todas as diárias marcadas?</span>
       <button type="button" class="danger" id="delyes">Excluir</button>
@@ -211,6 +219,7 @@ const diasNoMes=()=>new Date(ym.y,ym.m+1,0).getDate();
 
 let db=null, maqs={}, lanc={}, ov={}, editing=null, pen=1;
 const LS='diarias-maquinas-v1';
+const MENSAL_DIAS=22;
 function toast(t){const e=$('#toast');e.textContent=t;e.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>e.hidden=true,2600)}
 
 /* ---------- armazenamento: banco compartilhado; sem ele, só neste navegador ---------- */
@@ -264,15 +273,16 @@ function periodo(m){ // dias do mês em que a máquina esteve na obra
 function calc(m){
   const dd=dias(m.id+'_'+mesKey());
   let di=0,pa=0;for(const v of Object.values(dd)){if(v==='P')pa++;else di+=v}
-  const p=periodo(m)||{dias:0,n:diasNoMes()};
   let total=0,info='';
-  if(m.tipo==='mensal'){
-    total=m.valor!=null?m.valor*p.dias/p.n:0;
-    info=p.dias===p.n?'mês cheio':p.dias+'/'+p.n+' dias';
+  if(m.tipo==='mensal'){ // mensal = 22 diárias: cada diária marcada vale valor ÷ 22
+    total=m.valor!=null?m.valor/MENSAL_DIAS*di:0;
+    info=num(di)+'/'+MENSAL_DIAS+' diárias';
   }else{total=m.valor!=null?m.valor*di:0;info=num(di)+' × '+(m.valor!=null?brl(m.valor):'—')}
   return {di,pa,total,info,semValor:m.valor==null};
 }
-const visiveis=()=>Object.values(maqs).filter(m=>periodo(m)).sort((a,b)=>(a.obra||'').localeCompare(b.obra||'')||a.nome.localeCompare(b.nome));
+// Ordem da lista: fixadas primeiro, depois a ordem que você definiu com as setas
+const cmp=(a,b)=>(b.fixada?1:0)-(a.fixada?1:0)||(a.ordem??1e9)-(b.ordem??1e9)||(a.obra||'').localeCompare(b.obra||'')||a.nome.localeCompare(b.nome);
+const visiveis=()=>Object.values(maqs).filter(m=>periodo(m)).sort(cmp);
 function filtradas(){
   const q=$('#q').value.trim().toLowerCase(), ob=$('#f_obra').value, tp=$('#f_tipo').value;
   return visiveis().filter(m=>(!ob||m.obra===ob)&&(!tp||m.tipo===tp)&&(!q||[m.nome,m.ident,m.forn,m.obra].join(' ').toLowerCase().includes(q)));
@@ -304,9 +314,11 @@ function render(){
   list.forEach((m,i)=>{
     const c=rowsC[i], p=periodo(m), dd=dias(m.id+'_'+mesKey());
     const sub=[m.ident,m.forn,m.obra].filter(Boolean).map(esc).join(' · ');
-    h+=`<tr data-id="${esc(m.id)}"><td class="sticky mq"><button type="button" data-edit="${esc(m.id)}"><span class="nm">${esc(m.nome)}</span>${sub?`<span class="sub">${sub}</span>`:''}</button></td>
+    const grp=list.filter(x=>!!x.fixada===!!m.fixada), gi=grp.indexOf(m), nm=esc(m.nome);
+    h+=`<tr data-id="${esc(m.id)}"${m.fixada?' class="pinned"':''}><td class="sticky mq"><div class="row"><button type="button" data-edit="${esc(m.id)}"><span class="nm">${nm}</span>${sub?`<span class="sub">${sub}</span>`:''}</button>
+      <span class="ctl"><button type="button" data-pin aria-pressed="${!!m.fixada}" title="${m.fixada?'Desafixar':'Fixar no topo'}" aria-label="${m.fixada?'Desafixar':'Fixar no topo'} ${nm}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 1 15 5.5l-1.4 1.4-.9-.9-2.6 2.6.3 3.3-1.4 1.4-2.9-2.9L2.4 14.1l-.5-.5 3.7-3.7-2.9-2.9 1.4-1.4 3.3.3L10 3.3l-.9-.9z"/></svg></button><button type="button" data-move="-1" ${gi<=0?'disabled':''} title="Subir" aria-label="Subir ${nm}">▲</button><button type="button" data-move="1" ${gi>=grp.length-1?'disabled':''} title="Descer" aria-label="Descer ${nm}">▼</button></span></div></td>
       <td class="cb"><select data-tipo="${esc(m.id)}" aria-label="Cobrança de ${esc(m.nome)}"><option value="diaria"${m.tipo!=='mensal'?' selected':''}>Diária</option><option value="mensal"${m.tipo==='mensal'?' selected':''}>Mensal</option></select></td>
-      <td class="vl"><input data-valor="${esc(m.id)}" inputmode="decimal" placeholder="em branco" value="${esc(fmtMoney(m.valor))}" aria-label="Valor de ${esc(m.nome)}"><span class="per">${m.tipo==='mensal'?'por mês':'por diária'}</span></td>`;
+      <td class="vl"><input data-valor="${esc(m.id)}" inputmode="decimal" placeholder="em branco" value="${esc(fmtMoney(m.valor))}" aria-label="Valor de ${esc(m.nome)}"><span class="per">${m.tipo==='mensal'?'por mês (22 diárias)':'por diária'}</span></td>`;
     for(let d=1;d<=n;d++){
       const w=new Date(ym.y,ym.m,d).getDay(), v=dd[pad(d)], [cls,t]=cell(v), out=d<p.d0||d>p.d1;
       h+=`<td class="d${w===0||w===6?' we':''}${out?' out':''}"><button type="button" class="${cls}" data-day="${d}" aria-label="Dia ${d}: ${v===1?'diária':v===0.5?'meia diária':v==='P'?'parada':'vazio'}">${t}</button></td>`;
@@ -319,9 +331,31 @@ function render(){
   if(keep){const el=g.querySelector(`[data-valor="${CSS.escape(keep.id)}"]`);if(el){el.value=keep.v;el.focus()}}
 }
 
+/* ---------- fixar e reordenar ---------- */
+async function salvarOrdem(full){
+  const ch=[];full.forEach((m,i)=>{if(m.ordem!==i){m.ordem=i;ch.push(m)}});
+  render();
+  const r=await Promise.allSettled(ch.map(m=>patchMaq(m.id,{ordem:m.ordem})));
+  if(r.some(x=>x.status==='rejected'))toast('Não foi possível salvar a nova ordem. Tente de novo.');
+}
+function move(id,dir){
+  const m=maqs[id], vis=filtradas().filter(x=>!!x.fixada===!!m.fixada), j=vis.indexOf(m)+dir;
+  if(j<0||j>=vis.length)return;
+  const full=Object.values(maqs).sort(cmp), a=full.indexOf(m), b=full.indexOf(vis[j]);
+  full.splice(a,1);full.splice(b,0,m); // vai para o lugar do vizinho visível
+  salvarOrdem(full).then(()=>{const el=document.querySelector(`tr[data-id="${CSS.escape(id)}"] [data-move="${dir}"]`);el&&!el.disabled&&el.focus()});
+}
+async function togglePin(id){
+  const m=maqs[id];m.fixada=!m.fixada;render();
+  try{await patchMaq(id,{fixada:m.fixada});toast(m.fixada?'Máquina fixada no topo':'Máquina desafixada')}
+  catch(e){m.fixada=!m.fixada;render();toast('Não foi possível fixar. Tente de novo.')}
+}
+
 /* ---------- interação na grade ---------- */
 $('#grid').addEventListener('click',e=>{
   const ed=e.target.closest('[data-edit]');if(ed){openDlg(ed.dataset.edit);return}
+  const pn=e.target.closest('[data-pin]');if(pn){togglePin(pn.closest('tr').dataset.id);return}
+  const mv=e.target.closest('[data-move]');if(mv){move(mv.closest('tr').dataset.id,Number(mv.dataset.move));return}
   const b=e.target.closest('[data-day]');if(!b)return;
   const id=b.closest('tr').dataset.id, k=id+'_'+mesKey(), d=pad(b.dataset.day);
   const cur=dias(k)[d]||0, nx=cur===pen?0:pen;
@@ -366,6 +400,7 @@ $('#frm').addEventListener('submit',async e=>{
   if(vs.trim()&&v==null){toast('Valor inválido. Use números, ex.: 850,00');return}
   if(d.ini&&d.fim&&d.fim<d.ini){toast('A devolução é antes da chegada. Confira as datas.');return}
   d.valor=v;
+  if(editing){d.fixada=!!editing.fixada;if(editing.ordem!=null)d.ordem=editing.ordem}
   const id=editing?.id||uid();d.id=id;d.criado=editing?.criado||new Date().toISOString();
   $('#save').disabled=true;
   try{await putMaq(id,d);$('#dlg').close();toast(editing?'Máquina atualizada':'Máquina cadastrada')}
